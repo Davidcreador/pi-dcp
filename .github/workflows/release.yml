@@ -1,0 +1,67 @@
+name: Release
+
+# Trigger: any v*.*.* tag pushed to the repo. Creates a GitHub Release with
+# auto-generated notes from CHANGELOG.md if a matching section exists,
+# otherwise falls back to the commit log since the previous tag.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history so we can diff against previous tag
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # Run the full check before publishing to make sure tagged code is green.
+      - name: Install dev dependencies
+        run: |
+          npm install --no-save --silent \
+            typescript@latest \
+            @earendil-works/pi-coding-agent@latest
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
+
+      - name: Unit tests
+        run: node --experimental-strip-types --test test/*.test.ts
+
+      # Extract notes for this tag from CHANGELOG.md. Section convention:
+      #   ## [X.Y.Z] — YYYY-MM-DD
+      #   ... section body ...
+      # We grab everything from that header to the next "## " heading.
+      - name: Extract release notes
+        id: notes
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          NOTES=$(awk -v tag="$TAG" '
+            /^## \['"$TAG"'\]/ { capture=1; next }
+            /^## \[/           { capture=0 }
+            capture            { print }
+          ' CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES="No CHANGELOG entry found for v$TAG; see commit history."
+          fi
+          {
+            echo "body<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "pi-dcp ${{ github.ref_name }}"
+          body: ${{ steps.notes.outputs.body }}
+          draft: false
+          prerelease: false
