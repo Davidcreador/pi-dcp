@@ -7,6 +7,25 @@
   "author": "davecodes",
   "license": "AGPL-3.0-or-later",
   "main": "./index.ts",
+  "homepage": "https://github.com/Davidcreador/pi-dcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Davidcreador/pi-dcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Davidcreador/pi-dcp/issues"
+  },
+  "keywords": [
+    "pi",
+    "pi-extension",
+    "pi-package",
+    "dcp",
+    "context-pruning",
+    "token-optimization",
+    "llm",
+    "agent",
+    "opencode-dcp-port"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
     "test": "node --experimental-strip-types --test test/*.test.ts",
