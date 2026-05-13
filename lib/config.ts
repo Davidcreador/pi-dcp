@@ -19,6 +19,15 @@ export interface DcpConfig {
 	debug: boolean;
 	/** "off" | "minimal" | "detailed" — controls /dcp context-style notifications. */
 	pruneNotification: "off" | "minimal" | "detailed";
+	/**
+	 * Protect the most recent N turns from ALL pruning (dedup, purgeErrors,
+	 * stored compressions). "Turn" here is bounded by user messages — the last
+	 * `turns` user-to-user spans are immune.
+	 */
+	turnProtection: {
+		enabled: boolean;
+		turns: number;
+	};
 	experimental: {
 		/**
 		 * Enable user-editable prompt overrides under
@@ -51,6 +60,14 @@ export interface DcpConfig {
 		minContextLimit: number | string;
 		/** Soft ceiling — at/above this we push stronger nudges. number or "X%" of context window. */
 		maxContextLimit: number | string;
+		/**
+		 * Per-model override map for `minContextLimit`. Key is `"<provider>/<id>"`
+		 * matching `ctx.model.provider`/`ctx.model.id`. Value follows the same
+		 * number-or-"X%" grammar as the global setting. Wins over the global.
+		 */
+		modelMinLimits?: Record<string, number | string>;
+		/** Per-model override for `maxContextLimit`. Wins over the global. */
+		modelMaxLimits?: Record<string, number | string>;
 		/** Permission for the `compress` tool. "deny" means do not register it at all. */
 		permission: Permission;
 		/** Tools whose outputs are never pruned and are appended to compression summaries. */
@@ -64,6 +81,18 @@ export interface DcpConfig {
 		 * nudgeEveryTurns). Set to 5 to fire every 5th fetch.
 		 */
 		nudgeFrequency: number;
+		/**
+		 * Start forcing a soft nudge after this many assistant/tool messages have
+		 * happened since the last user message, even if the context floor hasn't
+		 * been crossed. 0 disables this trigger.
+		 */
+		iterationNudgeThreshold: number;
+		/**
+		 * Controls the wording strength of the soft nudge.
+		 * "soft"   = gentle reminder (lower bias toward compression)
+		 * "strong" = aggressive language (higher bias toward compression)
+		 */
+		nudgeForce: "soft" | "strong";
 	};
 	strategies: {
 		deduplication: {
@@ -99,6 +128,10 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	experimental: {
 		customPrompts: false,
 	},
+	turnProtection: {
+		enabled: false,
+		turns: 3,
+	},
 	manualMode: {
 		enabled: false,
 		automaticStrategies: true,
@@ -111,6 +144,8 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 		protectedTools: [],
 		nudgeEveryTurns: 5,
 		nudgeFrequency: 1,
+		iterationNudgeThreshold: 0,
+		nudgeForce: "soft",
 	},
 	strategies: {
 		deduplication: {
@@ -200,6 +235,25 @@ export function loadConfig(
  * Junk values fall back to the safest interpretation — for a floor this is
  * "never trigger nudges" (= return contextWindow), for the caller's purposes.
  */
+/**
+ * Pick the effective limit for the active model. If `overrides` has a matching
+ * `"<provider>/<id>"` entry we use that; otherwise we return the global default.
+ */
+export function resolveModelLimit(
+	globalSetting: number | string,
+	overrides: Record<string, number | string> | undefined,
+	model: { provider?: string; id?: string } | undefined,
+	contextWindow: number | undefined,
+): number {
+	if (overrides && model?.provider && model?.id) {
+		const key = `${model.provider}/${model.id}`;
+		if (key in overrides) {
+			return resolveContextLimit(overrides[key], contextWindow);
+		}
+	}
+	return resolveContextLimit(globalSetting, contextWindow);
+}
+
 export function resolveContextLimit(
 	setting: number | string,
 	contextWindow: number | undefined,

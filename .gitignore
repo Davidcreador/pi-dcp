@@ -3,5 +3,7 @@ node_modules/
 *.tsbuildinfo
 
 # user runtime state — regenerated on each pi launch
-config.json
-prompts/
+# (anchor with leading / so we only ignore the TOP-level prompts dir,
+#  not lib/prompts/ which is the source code)
+/config.json
+/prompts/

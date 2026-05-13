@@ -1,25 +1,47 @@
 /**
- * System-prompt nudges that encourage the model to call `compress` when the
- * conversation approaches the configured maxContextLimit.
+ * System-prompt nudges that encourage the model to call `compress`.
  *
- * Throttling rules (any one returning false stops the nudge):
- *   1. usage < minContextLimit                  → no nudge
- *   2. manualMode.enabled                       → no nudge (LLM can't compress anyway)
- *   3. soft nudges: count++ % nudgeFrequency !== 0
- *      AND (turnIndex - lastSoftNudgeTurn) < nudgeEveryTurns
- *   4. usage >= maxContextLimit                 → HARD nudge every fetch (we want urgency)
+ * Three independent nudge surfaces:
  *
- * Soft text and hard text both come from PromptStore, so the user can override
- * either by dropping a file in prompts/overrides/.
+ *   - SOFT / STRONG   appended when usage crosses minContextLimit. Text comes
+ *                     from PROMPTS.softNudge or PROMPTS.strongNudge depending
+ *                     on `compress.nudgeForce`. Throttled by:
+ *                       * nudgeFrequency (per before_agent_start)
+ *                       * nudgeEveryTurns (per turn)
+ *   - HARD            appended when usage crosses maxContextLimit. Fires every
+ *                     fetch above the ceiling — urgency outweighs token cost.
+ *   - ITERATION       appended after iterationNudgeThreshold non-user messages
+ *                     since the last user message. Independent of context
+ *                     size; fires at most once per iteration window.
+ *
+ * Manual mode (config OR runtime) suppresses ALL nudges — the model can't
+ * compress anyway.
+ *
+ * Per-model context limits: if `compress.modelMinLimits` / `modelMaxLimits`
+ * has a `"<provider>/<id>"` entry matching the current model, that wins over
+ * the global `minContextLimit` / `maxContextLimit`.
  */
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { type DcpConfig, resolveContextLimit } from "./config.ts";
-import { PROMPTS, type PromptStore } from "./prompts/index.ts";
+import { type DcpConfig, resolveModelLimit } from "./config.ts";
+import { PROMPTS, type PromptName, type PromptStore } from "./prompts/index.ts";
 import type { SessionState } from "./state.ts";
+
+/** Count non-user messages back to the most recent user message in the branch.
+ *  Returns 0 if no user message is found (fresh session). */
+function messagesSinceLastUser(branch: ReadonlyArray<unknown>): number {
+	let count = 0;
+	for (let i = branch.length - 1; i >= 0; i--) {
+		const entry = branch[i] as { type?: string; message?: { role?: string } };
+		if (entry?.type !== "message" || !entry.message) continue;
+		if (entry.message.role === "user") return count;
+		count++;
+	}
+	return count;
+}
 
 export function makeNudgeHandler(
 	config: DcpConfig,
@@ -36,27 +58,71 @@ export function makeNudgeHandler(
 		state.nudgeFetchCount++;
 
 		const usage = ctx.getContextUsage();
-		if (!usage || usage.tokens === null || usage.contextWindow <= 0) return;
+		const window = usage?.contextWindow && usage.contextWindow > 0 ? usage.contextWindow : undefined;
+		const model = ctx.model as { provider?: string; id?: string } | undefined;
+		const minLimit = resolveModelLimit(
+			config.compress.minContextLimit,
+			config.compress.modelMinLimits,
+			model,
+			window,
+		);
+		const maxLimit = resolveModelLimit(
+			config.compress.maxContextLimit,
+			config.compress.modelMaxLimits,
+			model,
+			window,
+		);
 
-		const minLimit = resolveContextLimit(config.compress.minContextLimit, usage.contextWindow);
-		const maxLimit = resolveContextLimit(config.compress.maxContextLimit, usage.contextWindow);
+		const tokens = usage?.tokens ?? null;
+		const isHard = tokens !== null && tokens >= maxLimit;
+		const isSoft = !isHard && tokens !== null && tokens >= minLimit;
 
-		if (usage.tokens < minLimit) return;
-
-		const isHard = usage.tokens >= maxLimit;
-		if (!isHard) {
-			// Per-request throttle: only emit on every Nth fetch.
-			const freq = Math.max(1, config.compress.nudgeFrequency);
-			if (state.nudgeFetchCount % freq !== 0) return;
-
-			// Per-turn throttle: limit to once every N turns.
-			const everyN = Math.max(1, config.compress.nudgeEveryTurns);
-			if (state.turnIndex - state.lastSoftNudgeTurn < everyN) return;
-			state.lastSoftNudgeTurn = state.turnIndex;
+		// Iteration nudge: independent of context size. We need the session
+		// branch to count messages-since-user; fall back to 0 if unavailable.
+		let iterationFired = false;
+		if (config.compress.iterationNudgeThreshold > 0) {
+			let branch: ReadonlyArray<unknown> = [];
+			try {
+				branch = ctx.sessionManager.getBranch();
+			} catch {
+				branch = [];
+			}
+			const since = messagesSinceLastUser(branch);
+			if (since >= config.compress.iterationNudgeThreshold) {
+				// Fire at most once per iteration window: track the count at which
+				// we last fired and require another `threshold` messages before
+				// firing again.
+				if (since - state.lastIterationNudgeAt >= config.compress.iterationNudgeThreshold) {
+					state.lastIterationNudgeAt = since;
+					iterationFired = true;
+				}
+			} else {
+				// Reset window when user has spoken again.
+				state.lastIterationNudgeAt = 0;
+			}
 		}
 
-		const nudge = prompts.read(isHard ? PROMPTS.hardNudge : PROMPTS.softNudge);
+		// Build the addendum stack. Order: soft/strong -> iteration -> hard.
+		const parts: PromptName[] = [];
+
+		if (isSoft) {
+			const freq = Math.max(1, config.compress.nudgeFrequency);
+			const turnGate = state.turnIndex - state.lastSoftNudgeTurn;
+			const everyN = Math.max(1, config.compress.nudgeEveryTurns);
+			const fireSoft = state.nudgeFetchCount % freq === 0 && turnGate >= everyN;
+			if (fireSoft) {
+				state.lastSoftNudgeTurn = state.turnIndex;
+				parts.push(config.compress.nudgeForce === "strong" ? PROMPTS.strongNudge : PROMPTS.softNudge);
+			}
+		}
+
+		if (iterationFired) parts.push(PROMPTS.iterationNudge);
+		if (isHard) parts.push(PROMPTS.hardNudge);
+
+		if (parts.length === 0) return;
+
 		const base = event.systemPrompt ?? "";
-		return { systemPrompt: `${base}\n${nudge}` };
+		const addendum = parts.map((p) => prompts.read(p)).join("\n");
+		return { systemPrompt: `${base}\n${addendum}` };
 	};
 }

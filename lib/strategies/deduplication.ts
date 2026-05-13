@@ -31,6 +31,7 @@ export function applyDeduplication(
 	messages: AnyMessage[],
 	config: DcpConfig,
 	state: SessionState,
+	protectedByTurn: Set<string> = new Set(),
 ): DedupResult {
 	if (!config.strategies.deduplication.enabled) {
 		return { prunedCount: 0, tokensSaved: 0 };
@@ -62,6 +63,7 @@ export function applyDeduplication(
 		const m = messages[i];
 		if (!isToolResult(m)) continue;
 		if (protectedTools.has(m.toolName)) continue;
+		if (protectedByTurn.has(m.toolCallId)) continue;
 		const key = callIdToKey.get(m.toolCallId);
 		if (!key) continue;
 		if (!seenKeys.has(key)) {

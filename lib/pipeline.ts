@@ -28,6 +28,7 @@ import {
 	isAssistant,
 	isToolCall,
 	isToolResult,
+	protectedByRecency,
 } from "./messages.ts";
 import { applyDeduplication } from "./strategies/deduplication.ts";
 import { applyPurgeErrors } from "./strategies/purge-errors.ts";
@@ -96,6 +97,13 @@ export function runPipeline(
 		(config.manualMode.enabled || state.manualMode) &&
 		!config.manualMode.automaticStrategies;
 
+	// Compute the protected-by-recency set once per pipeline run. Empty when
+	// turnProtection is disabled. ALL strategies and stored compressions must
+	// honor this set — it's the user's promise that recent work is untouched.
+	const protectedByTurn = config.turnProtection.enabled
+		? protectedByRecency(originalMessages, config.turnProtection.turns)
+		: new Set<string>();
+
 	const summaries = compressionsByToolCallId(state);
 	const compressionTargets = new Set(summaries.keys());
 
@@ -127,6 +135,7 @@ export function runPipeline(
 		for (const m of messages) {
 			if (!isToolResult(m)) continue;
 			if (protectedTools.has(m.toolName)) continue;
+			if (protectedByTurn.has(m.toolCallId)) continue;
 			const rec = summaries.get(m.toolCallId);
 			if (!rec || rec.suspended) continue;
 			if (isAlreadyPlaceholder(m)) continue;
@@ -141,12 +150,12 @@ export function runPipeline(
 
 	if (!manualSilent) {
 		// 2. Deduplication.
-		const dedup = applyDeduplication(messages, config, state);
+		const dedup = applyDeduplication(messages, config, state, protectedByTurn);
 		result.dedupPruned = dedup.prunedCount;
 		result.tokensSaved += dedup.tokensSaved;
 
 		// 3. Purge errored tool inputs.
-		const purged = applyPurgeErrors(messages, config, state);
+		const purged = applyPurgeErrors(messages, config, state, protectedByTurn);
 		result.errorInputsPurged = purged.purgedCount;
 		result.tokensSaved += purged.tokensSaved;
 	}

@@ -38,6 +38,7 @@ export function applyPurgeErrors(
 	messages: AnyMessage[],
 	config: DcpConfig,
 	state: SessionState,
+	protectedByTurn: Set<string> = new Set(),
 ): PurgeResult {
 	const cfg = config.strategies.purgeErrors;
 	if (!cfg.enabled) return { purgedCount: 0, tokensSaved: 0 };
@@ -54,6 +55,7 @@ export function applyPurgeErrors(
 		if (!isToolResult(m)) continue;
 		if (!m.isError) continue;
 		if (protectedTools.has(m.toolName)) continue;
+		if (protectedByTurn.has(m.toolCallId)) continue;
 		erroredCallIds.add(m.toolCallId);
 		if (!state.erroredAt.has(m.toolCallId)) {
 			state.erroredAt.set(m.toolCallId, state.turnIndex);
@@ -72,6 +74,7 @@ export function applyPurgeErrors(
 		for (const c of m.content) {
 			if (!isToolCall(c)) continue;
 			if (protectedTools.has(c.name)) continue;
+			if (protectedByTurn.has(c.id)) continue;
 			if (!erroredCallIds.has(c.id)) continue;
 			if (state.purgedErrorCallIds.has(c.id)) continue;
 

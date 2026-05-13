@@ -238,3 +238,41 @@ export function compressionPlaceholderToolResult(
 }
 
 export const PURGE_ARGS_MARKER = "[args purged by pi-dcp]";
+
+/**
+ * Compute the set of tool-call IDs that fall inside the last `turns` user
+ * boundaries (counting newest-first). These IDs must be skipped by every
+ * pruning strategy when turnProtection is enabled.
+ *
+ * Algorithm: walk newest → oldest. Increment a counter on each user message.
+ * Once the counter exceeds `turns`, stop — everything beyond is outside the
+ * protected window. While the counter is <= `turns`, collect tool-call IDs
+ * from every assistant tool call and every tool result we see.
+ *
+ * `turns <= 0` returns an empty set (protection disabled).
+ */
+export function protectedByRecency(messages: AnyMessage[], turns: number): Set<string> {
+	if (!Number.isFinite(turns) || turns <= 0) return new Set();
+	const out = new Set<string>();
+	let userCount = 0;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const m = messages[i];
+		if (isUser(m)) {
+			userCount++;
+			// A user message is the BOUNDARY between turns; everything beyond
+			// it (older) belongs to a previous turn we are not protecting.
+			if (userCount >= turns) break;
+			continue;
+		}
+		if (isToolResult(m)) {
+			out.add(m.toolCallId);
+			continue;
+		}
+		if (isAssistant(m)) {
+			for (const c of m.content) {
+				if (isToolCall(c)) out.add(c.id);
+			}
+		}
+	}
+	return out;
+}

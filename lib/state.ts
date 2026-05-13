@@ -48,6 +48,12 @@ export interface SessionState {
 	lastSoftNudgeTurn: number;
 	/** Monotonic counter of before_agent_start invocations — powers nudgeFrequency. */
 	nudgeFetchCount: number;
+	/**
+	 * Count of "messages since last user message" at which the iteration
+	 * nudge most recently fired. Used to throttle the iteration nudge so it
+	 * doesn't repeat on every fetch once over the threshold.
+	 */
+	lastIterationNudgeAt: number;
 }
 
 export function createSessionState(): SessionState {
@@ -68,5 +74,6 @@ export function createSessionState(): SessionState {
 		appliedCompressionTargets: new Set(),
 		lastSoftNudgeTurn: -Infinity,
 		nudgeFetchCount: 0,
+		lastIterationNudgeAt: 0,
 	};
 }
