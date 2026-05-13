@@ -11,6 +11,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import { DEFAULT_CONFIG, resolveModelLimit } from "../lib/config.ts";
+import { lenientConfig } from "./_helpers.ts";
 import {
 	type AnyMessage,
 	type AssistantMessage,
@@ -72,7 +73,7 @@ test("turnProtection prevents dedup of recent turn results", () => {
 	// c1 and c2 are identical grep calls (would normally dedup); both inside
 	// the protected window. c0 is older and same key — should dedup against
 	// nothing because it's the only call outside the window.
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.turnProtection.enabled = true;
 	cfg.turnProtection.turns = 1;
 	const msgs: AnyMessage[] = [
@@ -88,7 +89,7 @@ test("turnProtection prevents dedup of recent turn results", () => {
 });
 
 test("turnProtection prevents purgeErrors on recent failed call", () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.turnProtection.enabled = true;
 	cfg.turnProtection.turns = 1;
 	cfg.strategies.purgeErrors.turns = 0; // would normally purge immediately
@@ -104,7 +105,7 @@ test("turnProtection prevents purgeErrors on recent failed call", () => {
 });
 
 test("turnProtection prevents compression of recent tool result", () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.turnProtection.enabled = true;
 	cfg.turnProtection.turns = 1;
 	const state = createSessionState();
@@ -141,7 +142,7 @@ test("resolveModelLimit: % in override resolved against window", () => {
 });
 
 test("nudge uses per-model max override", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 1_000_000; // global far above usage
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.modelMaxLimits = { "openai/gpt-5.4-mini": 50_000 };
@@ -161,7 +162,7 @@ test("nudge uses per-model max override", async () => {
 // ──────── iterationNudgeThreshold ────────
 
 test("iterationNudgeThreshold fires after N messages since last user msg", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 1_000_000; // no soft trigger
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.iterationNudgeThreshold = 3;
@@ -184,7 +185,7 @@ test("iterationNudgeThreshold fires after N messages since last user msg", async
 });
 
 test("iterationNudgeThreshold=0 disables the trigger", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 1_000_000;
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.iterationNudgeThreshold = 0;
@@ -204,7 +205,7 @@ test("iterationNudgeThreshold=0 disables the trigger", async () => {
 // ──────── nudgeForce ────────
 
 test("nudgeForce='strong' uses strong-nudge text", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 0;
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.nudgeForce = "strong";
@@ -222,7 +223,7 @@ test("nudgeForce='strong' uses strong-nudge text", async () => {
 });
 
 test("nudgeForce='soft' uses soft-nudge text (default)", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 0;
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.nudgeForce = "soft";

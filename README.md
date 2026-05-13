@@ -69,17 +69,37 @@ Plus three nudge surfaces that bias the model toward compressing:
 
 ## Install
 
+Use pi's built-in installer:
+
 ```bash
-git clone git@github.com:Davidcreador/pi-dcp.git ~/.pi/agent/extensions/pi-dcp
-# restart pi
+pi install git:github.com/Davidcreador/pi-dcp
+# or:  pi install https://github.com/Davidcreador/pi-dcp
 ```
 
-That's it. Pi auto-discovers extensions under `~/.pi/agent/extensions/*/`. The first launch writes a starter `config.json` and a `prompts/defaults/` reference tree.
+That's it. Pi clones the repo, registers the package in `~/.pi/agent/settings.json`, and the extension is live on the next launch.
+
+Alternative (manual clone, if you want to hack on the code):
+
+```bash
+git clone git@github.com:Davidcreador/pi-dcp.git ~/.pi/agent/extensions/pi-dcp
+```
+
+Either way, **user state always lives at `~/.pi-dcp/`** — not next to the code. That directory holds:
+
+```
+~/.pi-dcp/
+├── config.json              your settings (written on first run from defaults)
+├── prompts/
+│   ├── defaults/            regenerated each launch (read-only reference)
+│   └── overrides/           drop *.md files here to customize the LLM prompts
+├── dcp.log                  debug log (when config.debug: true)
+└── stats.json               lifetime savings counters
+```
 
 To **update**:
 
 ```bash
-cd ~/.pi/agent/extensions/pi-dcp && git pull
+pi update git:github.com/Davidcreador/pi-dcp
 ```
 
 ## Quick start
@@ -98,7 +118,7 @@ Open a long session as usual. Check savings any time with:
 /dcp stats       # lifetime, across sessions
 ```
 
-To bias the model toward compressing more aggressively, edit `~/.pi/agent/extensions/pi-dcp/config.json`:
+To bias the model toward compressing more aggressively, edit `~/.pi-dcp/config.json`:
 
 ```jsonc
 {
@@ -128,7 +148,9 @@ Restart pi after config changes.
 
 ## Configuration reference
 
-Defaults are written to `~/.pi/agent/extensions/pi-dcp/config.json` on first run. Per-project overrides at `<repo>/.pi/dcp.json` shallow-merge on top. **Restart pi after edits.**
+Defaults are written to `~/.pi-dcp/config.json` on first run. Per-project overrides at `<repo>/.pi/dcp.json` shallow-merge on top. **Restart pi after edits.**
+
+The shipped defaults are tuned for real-world long sessions — see [`config.example.json`](config.example.json) in this repo for the exact reference shape and inline comments.
 
 ```jsonc
 {
@@ -241,7 +263,7 @@ Drop a `.pi/dcp.json` in the repo root:
 "experimental": { "customPrompts": true }
 ```
 
-Then create `~/.pi/agent/extensions/pi-dcp/prompts/overrides/strong-nudge.md` with your text. Restart pi.
+Then create `~/.pi-dcp/prompts/overrides/strong-nudge.md` with your text. Restart pi.
 
 ## Troubleshooting
 

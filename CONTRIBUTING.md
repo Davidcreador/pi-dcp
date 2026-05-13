@@ -20,6 +20,8 @@ Pi auto-loads extensions from `~/.pi/agent/extensions/<name>/`. For live testing
 ln -s "$(pwd)" ~/.pi/agent/extensions/pi-dcp
 ```
 
+Note: **user state (config, prompts, logs)** always lives at `~/.pi-dcp/`, independent of where the code is. Delete `~/.pi-dcp/config.json` to regenerate from `DEFAULT_CONFIG`.
+
 ## Workflow
 
 ```bash

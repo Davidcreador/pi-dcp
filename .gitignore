@@ -3,6 +3,4 @@ node_modules/
 node_modules_link
 *.tsbuildinfo
 
-# regenerated on each pi launch — leading / anchors to top-level only,
-# so lib/prompts/ (source code) is not affected
-/prompts/
+# User state lives at ~/.pi-dcp/, not in the repo. Nothing else to ignore.

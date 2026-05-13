@@ -75,14 +75,9 @@ export const DEFAULT_PROMPTS: Record<PromptName, string> = {
 	].join("\n"),
 };
 
-const PROMPTS_DIR = path.join(
-	os.homedir(),
-	".pi",
-	"agent",
-	"extensions",
-	"pi-dcp",
-	"prompts",
-);
+// User-state directory. Matches PI_DCP_USER_DIR in lib/config.ts (kept
+// duplicated here so prompts has no module-graph dependency on config).
+const PROMPTS_DIR = path.join(os.homedir(), ".pi-dcp", "prompts");
 const DEFAULTS_DIR = path.join(PROMPTS_DIR, "defaults");
 const OVERRIDES_DIR = path.join(PROMPTS_DIR, "overrides");
 

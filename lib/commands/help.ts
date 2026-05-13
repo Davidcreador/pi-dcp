@@ -10,8 +10,9 @@ const HELP = [
 	"  /dcp decompress <id>  — temporarily restore a stored compression",
 	"  /dcp recompress <id>  — re-apply a previously decompressed entry",
 	"",
-	"Config: ~/.pi/agent/extensions/pi-dcp/config.json",
-	"Prompts: ~/.pi/agent/extensions/pi-dcp/prompts/{defaults,overrides}/",
+	"Config: ~/.pi-dcp/config.json",
+	"Prompts: ~/.pi-dcp/prompts/{defaults,overrides}/",
+	"Logs:   ~/.pi-dcp/dcp.log (when debug:true)",
 ].join("\n");
 
 export async function handleHelp(_args: string, ctx: ExtensionCommandContext): Promise<void> {

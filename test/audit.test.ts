@@ -15,6 +15,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import { DEFAULT_CONFIG } from "../lib/config.ts";
+import { lenientConfig } from "./_helpers.ts";
 import {
 	type AnyMessage,
 	type AssistantMessage,
@@ -66,7 +67,7 @@ test("protectedByRecency with turns=NaN/-1/Infinity disables protection", () => 
 // ───── iteration nudge re-fire window ─────
 
 test("iteration nudge does not re-fire until another threshold elapses", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 1_000_000;
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.iterationNudgeThreshold = 3;
@@ -98,7 +99,7 @@ test("iteration nudge does not re-fire until another threshold elapses", async (
 });
 
 test("iteration nudge resets when user message arrives", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 1_000_000;
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.iterationNudgeThreshold = 3;
@@ -129,7 +130,7 @@ test("iteration nudge resets when user message arrives", async () => {
 // ───── per-model min AND max on same model ─────
 
 test("modelMinLimits + modelMaxLimits both apply for the same model", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 1_000_000;
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.modelMinLimits = { "openai/gpt-5.5": 45_000 };
@@ -169,7 +170,7 @@ test("PromptStore.read on unknown name returns empty string (no crash)", () => {
 
 test("compress message tool refuses when ids are in protected window", async () => {
 	const state = createSessionState();
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.turnProtection.enabled = true;
 	cfg.turnProtection.turns = 1;
 	const tool = createCompressMessageTool({ state, logger: silentLogger, config: cfg }, tmpPromptStore());
@@ -193,7 +194,7 @@ test("compress message tool refuses when ids are in protected window", async () 
 
 test("compress range tool refuses when span overlaps protected window", async () => {
 	const state = createSessionState();
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.turnProtection.enabled = true;
 	cfg.turnProtection.turns = 1;
 	const tool = createCompressRangeTool({ state, logger: silentLogger, config: cfg }, tmpPromptStore());
@@ -219,7 +220,7 @@ test("compress range tool refuses when span overlaps protected window", async ()
 
 test("compress range tool proceeds when endpoints are outside protected window", async () => {
 	const state = createSessionState();
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.turnProtection.enabled = true;
 	cfg.turnProtection.turns = 1;
 	const tool = createCompressRangeTool({ state, logger: silentLogger, config: cfg }, tmpPromptStore());

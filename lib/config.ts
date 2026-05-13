@@ -119,17 +119,24 @@ export const ALWAYS_PROTECTED_TOOLS = new Set([
 	"skill",
 ]);
 
-/** Default config. Treat as frozen at runtime to avoid accidental shared
- *  mutation across sessions; callers that need a mutable copy must clone. */
+/**
+ * Default config. Tuned for real-world long sessions on modern Claude and
+ * GPT-5.x models. Treated as frozen at runtime to avoid accidental shared
+ * mutation across sessions; callers that need a mutable copy must clone.
+ *
+ * Per-model min/max limits are baked in here so users get sensible behavior
+ * the moment they `pi install` — they can still override anything in
+ * ~/.pi-dcp/config.json.
+ */
 export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	enabled: true,
 	debug: false,
-	pruneNotification: "detailed",
+	pruneNotification: "minimal",
 	experimental: {
 		customPrompts: false,
 	},
 	turnProtection: {
-		enabled: false,
+		enabled: true,
 		turns: 3,
 	},
 	manualMode: {
@@ -137,15 +144,41 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 		automaticStrategies: true,
 	},
 	compress: {
-		mode: "message",
-		minContextLimit: "30%",
-		maxContextLimit: "60%",
+		mode: "range",
+		minContextLimit: 30_000,
+		maxContextLimit: 70_000,
+		modelMinLimits: {
+			// Anthropic Claude 4.x — 200k windows.
+			"anthropic/claude-haiku-4-5": 30_000,
+			"anthropic/claude-sonnet-4-5": 50_000,
+			"anthropic/claude-sonnet-4-6": 50_000,
+			"anthropic/claude-opus-4-1": 35_000,
+			"anthropic/claude-opus-4-5": 35_000,
+			"anthropic/claude-opus-4-6": 35_000,
+			"anthropic/claude-opus-4-7": 35_000,
+			// OpenAI GPT-5.x — context window varies; values picked empirically.
+			"openai/gpt-5.4-mini-fast": 25_000,
+			"openai/gpt-5.4-mini": 30_000,
+			"openai/gpt-5.5": 45_000,
+		},
+		modelMaxLimits: {
+			"anthropic/claude-haiku-4-5": 70_000,
+			"anthropic/claude-sonnet-4-5": 120_000,
+			"anthropic/claude-sonnet-4-6": 120_000,
+			"anthropic/claude-opus-4-1": 85_000,
+			"anthropic/claude-opus-4-5": 85_000,
+			"anthropic/claude-opus-4-6": 85_000,
+			"anthropic/claude-opus-4-7": 85_000,
+			"openai/gpt-5.4-mini-fast": 50_000,
+			"openai/gpt-5.4-mini": 70_000,
+			"openai/gpt-5.5": 100_000,
+		},
 		permission: "allow",
 		protectedTools: [],
 		nudgeEveryTurns: 5,
-		nudgeFrequency: 1,
-		iterationNudgeThreshold: 0,
-		nudgeForce: "soft",
+		nudgeFrequency: 3,
+		iterationNudgeThreshold: 8,
+		nudgeForce: "strong",
 	},
 	strategies: {
 		deduplication: {
@@ -154,20 +187,20 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 		},
 		purgeErrors: {
 			enabled: true,
-			turns: 4,
+			turns: 2,
 			protectedTools: [],
 		},
 	},
 }) as DcpConfig;
 
-const GLOBAL_CONFIG_PATH = path.join(
-	os.homedir(),
-	".pi",
-	"agent",
-	"extensions",
-	"pi-dcp",
-	"config.json",
-);
+/**
+ * User-state directory. INDEPENDENT of where pi installs the extension
+ * code — pi may put the code under `~/.pi/agent/git/...` (git install),
+ * `~/.pi/agent/extensions/...` (manual clone), or the npm global tree (npm
+ * install). Config, prompts, and logs always live here.
+ */
+export const PI_DCP_USER_DIR = path.join(os.homedir(), ".pi-dcp");
+const GLOBAL_CONFIG_PATH = path.join(PI_DCP_USER_DIR, "config.json");
 
 function safeReadJson(
 	file: string,
@@ -198,14 +231,40 @@ function deepMerge<T>(base: T, override: Partial<T> | null | undefined): T {
 	return out;
 }
 
-/** Write the default config to GLOBAL_CONFIG_PATH if it does not yet exist. */
-function ensureStarterConfig(): void {
+/**
+ * Write a starter config to ~/.pi-dcp/config.json if one doesn't already
+ * exist. Also handles a one-time migration from the legacy install-path
+ * config (~/.pi/agent/extensions/pi-dcp/config.json) so users who manually
+ * cloned the repo before user-state moved don't lose their tuning.
+ */
+function ensureStarterConfig(onError: (msg: string) => void): void {
 	try {
 		if (fs.existsSync(GLOBAL_CONFIG_PATH)) return;
 		fs.mkdirSync(path.dirname(GLOBAL_CONFIG_PATH), { recursive: true });
+
+		// Migration path: if the old in-repo config still exists, copy it over
+		// so the user's tuning carries forward. Only happens once — we never
+		// overwrite an existing ~/.pi-dcp/config.json.
+		const legacyPath = path.join(
+			os.homedir(),
+			".pi", "agent", "extensions", "pi-dcp", "config.json",
+		);
+		if (fs.existsSync(legacyPath) && legacyPath !== GLOBAL_CONFIG_PATH) {
+			try {
+				fs.copyFileSync(legacyPath, GLOBAL_CONFIG_PATH);
+				onError(
+					`pi-dcp: migrated config from ${legacyPath} \u2192 ${GLOBAL_CONFIG_PATH}. ` +
+					`The legacy file can be deleted.`,
+				);
+				return;
+			} catch {
+				// Fall through to writing defaults.
+			}
+		}
+
 		fs.writeFileSync(GLOBAL_CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2));
 	} catch {
-		// Best effort. Missing starter is fine.
+		// Best effort. Missing starter is fine — DEFAULT_CONFIG still kicks in.
 	}
 }
 
@@ -213,7 +272,7 @@ export function loadConfig(
 	cwd: string,
 	onError: (msg: string) => void = (m) => console.error(m),
 ): DcpConfig {
-	ensureStarterConfig();
+	ensureStarterConfig(onError);
 	const globalOverride = safeReadJson(GLOBAL_CONFIG_PATH, onError);
 	const projectPath = path.join(cwd, ".pi", "dcp.json");
 	const projectOverride = safeReadJson(projectPath, onError);

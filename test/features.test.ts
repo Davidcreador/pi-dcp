@@ -11,6 +11,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import { DEFAULT_CONFIG } from "../lib/config.ts";
+import { lenientConfig } from "./_helpers.ts";
 import {
 	type AnyMessage,
 	type AssistantMessage,
@@ -84,7 +85,7 @@ test("PromptStore honors overrides when customPrompts enabled", () => {
 
 test("compress range tool resolves span between two endpoints", async () => {
 	const state = createSessionState();
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	const tool = createCompressRangeTool({ state, logger: silentLogger, config: cfg }, tmpPromptStore());
 
 	const branch = [
@@ -115,7 +116,7 @@ test("compress range tool resolves span between two endpoints", async () => {
 
 test("compress range tool refuses on unknown endpoint", async () => {
 	const state = createSessionState();
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	const tool = createCompressRangeTool({ state, logger: silentLogger, config: cfg }, tmpPromptStore());
 	const branch = [
 		{ type: "message", message: mkAssistantCall("c1", "grep", {}) },
@@ -136,7 +137,7 @@ test("compress range tool refuses on unknown endpoint", async () => {
 test("compress range tool respects manualMode", async () => {
 	const state = createSessionState();
 	state.manualMode = true;
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	const tool = createCompressRangeTool({ state, logger: silentLogger, config: cfg }, tmpPromptStore());
 	const r = await tool.execute(
 		"caller",
@@ -151,7 +152,7 @@ test("compress range tool respects manualMode", async () => {
 // ───────── manualMode.automaticStrategies ─────────
 
 test("manualMode.enabled with automaticStrategies=true still runs dedup", () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.manualMode.enabled = true;
 	cfg.manualMode.automaticStrategies = true;
 	const msgs: AnyMessage[] = [
@@ -165,7 +166,7 @@ test("manualMode.enabled with automaticStrategies=true still runs dedup", () => 
 });
 
 test("manualMode.enabled with automaticStrategies=false suppresses dedup AND purge", () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.manualMode.enabled = true;
 	cfg.manualMode.automaticStrategies = false;
 	const state = createSessionState();
@@ -184,7 +185,7 @@ test("manualMode.enabled with automaticStrategies=false suppresses dedup AND pur
 });
 
 test("manualMode.automaticStrategies=false still applies stored compressions", () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.manualMode.enabled = true;
 	cfg.manualMode.automaticStrategies = false;
 	const state = createSessionState();
@@ -208,7 +209,7 @@ test("manualMode.automaticStrategies=false still applies stored compressions", (
 // ───────── nudgeFrequency ─────────
 
 test("nudgeFrequency throttles soft nudge to every Nth fetch", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 0;
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.nudgeEveryTurns = 1; // turn throttle effectively off
@@ -233,7 +234,7 @@ test("nudgeFrequency throttles soft nudge to every Nth fetch", async () => {
 });
 
 test("nudgeFrequency=1 is a no-op (every fetch eligible by per-request rule)", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 0;
 	cfg.compress.maxContextLimit = 1_000_000;
 	cfg.compress.nudgeEveryTurns = 1;

@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DEFAULT_CONFIG, resolveContextLimit } from "../lib/config.ts";
+import { lenientConfig } from "./_helpers.ts";
 import { _internal as decompressInternals } from "../lib/commands/decompress.ts";
 import { makeNudgeHandler } from "../lib/nudges.ts";
 import { PromptStore } from "../lib/prompts/index.ts";
@@ -51,7 +52,7 @@ test("parseStrictId rejects junk", () => {
 });
 
 test("soft nudge fires only once every nudgeEveryTurns turns", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 0; // always over the floor
 	cfg.compress.maxContextLimit = 1_000_000; // never over the ceiling = soft only
 	cfg.compress.nudgeEveryTurns = 3;
@@ -76,7 +77,7 @@ test("soft nudge fires only once every nudgeEveryTurns turns", async () => {
 });
 
 test("hard nudge fires every turn when over maxContextLimit", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 0;
 	cfg.compress.maxContextLimit = 50_000;
 	const state = createSessionState();
@@ -94,7 +95,7 @@ test("hard nudge fires every turn when over maxContextLimit", async () => {
 });
 
 test("manual mode suppresses nudges", async () => {
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.compress.minContextLimit = 0;
 	const state = createSessionState();
 	state.manualMode = true;

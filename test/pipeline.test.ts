@@ -13,6 +13,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { DEFAULT_CONFIG } from "../lib/config.ts";
+import { lenientConfig } from "./_helpers.ts";
 import {
 	type AnyMessage,
 	type AssistantMessage,
@@ -79,7 +80,7 @@ test("dedup replaces older duplicates and keeps newest", () => {
 		mkToolResult("c2", "grep", "match line 1"),
 	];
 	const state = createSessionState();
-	const r = runPipeline(msgs, DEFAULT_CONFIG, state, silentLogger);
+	const r = runPipeline(msgs, lenientConfig(), state, silentLogger);
 	assert.equal(r.dedupPruned, 1);
 	const first = r.messages[1] as ToolResultMessage;
 	const second = r.messages[3] as ToolResultMessage;
@@ -95,7 +96,7 @@ test("dedup never touches protected tools (write)", () => {
 		mkToolResult("c2", "write", "ok"),
 	];
 	const state = createSessionState();
-	const r = runPipeline(msgs, DEFAULT_CONFIG, state, silentLogger);
+	const r = runPipeline(msgs, lenientConfig(), state, silentLogger);
 	assert.equal(r.dedupPruned, 0);
 });
 
@@ -109,7 +110,7 @@ test("pipeline does NOT mutate the input messages array or its members", () => {
 	// Capture deep snapshot of each entry's mutable surfaces.
 	const snapshots = orig.map((m) => JSON.parse(JSON.stringify(m)));
 	const state = createSessionState();
-	runPipeline(orig, DEFAULT_CONFIG, state, silentLogger);
+	runPipeline(orig, lenientConfig(), state, silentLogger);
 	for (let i = 0; i < orig.length; i++) {
 		assert.deepEqual(orig[i], snapshots[i], `message ${i} was mutated in place`);
 	}
@@ -123,8 +124,8 @@ test("pipeline is idempotent: re-running yields stable stats", () => {
 		mkToolResult("c2", "grep", "x"),
 	];
 	const state = createSessionState();
-	const r1 = runPipeline(msgs, DEFAULT_CONFIG, state, silentLogger);
-	const r2 = runPipeline(msgs, DEFAULT_CONFIG, state, silentLogger);
+	const r1 = runPipeline(msgs, lenientConfig(), state, silentLogger);
+	const r2 = runPipeline(msgs, lenientConfig(), state, silentLogger);
 	assert.equal(r1.dedupPruned, 1);
 	assert.equal(r2.dedupPruned, 0, "second run should not double-count");
 });
@@ -135,7 +136,7 @@ test("purgeErrors waits for the configured number of turns", () => {
 		mkToolResult("e1", "bash", "ENOENT", /* isError */ true),
 	];
 	const state = createSessionState();
-	const cfg = structuredClone(DEFAULT_CONFIG);
+	const cfg = lenientConfig();
 	cfg.strategies.purgeErrors.turns = 3;
 
 	// Turn 0: error first seen, not aged yet.
@@ -168,7 +169,7 @@ test("purgeErrors skips protected tools (edit)", () => {
 	];
 	const state = createSessionState();
 	state.turnIndex = 10;
-	const r = runPipeline(msgs, DEFAULT_CONFIG, state, silentLogger);
+	const r = runPipeline(msgs, lenientConfig(), state, silentLogger);
 	assert.equal(r.errorInputsPurged, 0);
 });
 
@@ -188,7 +189,7 @@ test("stored compression replaces tool result with placeholder", () => {
 		suspended: false,
 	});
 	state.nextCompressionId = 8;
-	const r = runPipeline(msgs, DEFAULT_CONFIG, state, silentLogger);
+	const r = runPipeline(msgs, lenientConfig(), state, silentLogger);
 	assert.equal(r.compressionsApplied, 1);
 	const tr = r.messages[1] as ToolResultMessage;
 	assert.match((tr.content[0] as any).text, /pi-dcp compression #7/);
@@ -211,7 +212,7 @@ test("suspended compression does NOT apply (decompress simulation)", () => {
 		tokensSaved: 0,
 		suspended: true,
 	});
-	const r = runPipeline(msgs, DEFAULT_CONFIG, state, silentLogger);
+	const r = runPipeline(msgs, lenientConfig(), state, silentLogger);
 	assert.equal(r.compressionsApplied, 0);
 	const tr = r.messages[1] as ToolResultMessage;
 	assert.equal((tr.content[0] as any).text, "original output");

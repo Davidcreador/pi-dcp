@@ -35,7 +35,7 @@ Call `compress(toolCallIds, topic, summary)` when:
 
 ## Configuration
 
-Defaults are auto-written to `~/.pi/agent/extensions/pi-dcp/config.json` on first run. Per-project overrides go in `<repo>/.pi/dcp.json`. Restart pi (or `/reload`) after changes.
+Defaults are auto-written to `~/.pi-dcp/config.json` on first run. Per-project overrides go in `<repo>/.pi/dcp.json`. Restart pi (or `/reload`) after changes.
 
 Notable knobs:
 
