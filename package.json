@@ -1,6 +1,6 @@
 {
   "name": "@davecodes/pi-dcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Dynamic Context Pruning for Pi — port of opencode-dcp. Deduplication, error-input purge, and an LLM-callable compress tool to keep long sessions cheap.",
   "type": "module",
   "author": {
