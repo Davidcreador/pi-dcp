@@ -58,9 +58,14 @@ A starter `config.json` is written to `~/.pi/agent/extensions/pi-dcp/` on first 
 
 Feature parity:
 - `compress.mode: "range" | "message"` — both implemented; `"message"` is the default.
-- Editable prompt overrides — set `experimental.customPrompts: true`, then drop files into `~/.pi/agent/extensions/pi-dcp/prompts/overrides/`.
-- `manualMode.enabled` with `manualMode.automaticStrategies` — same semantics as upstream.
-- `nudgeFrequency` per-request throttle — plus pi-dcp's `nudgeEveryTurns` per-turn throttle stacked on top.
+- `turnProtection.{enabled,turns}` — same semantics; in pi-dcp the compress tool *refuses upfront* if its targets land inside the protected window (upstream is more permissive).
+- `compress.modelMinLimits` / `modelMaxLimits` — per-model overrides keyed by `"<provider>/<id>"` matching pi's model registry.
+- `compress.iterationNudgeThreshold` — fire an iteration nudge after N non-user messages since the last user message.
+- `compress.nudgeForce: "soft" | "strong"` — controls wording strength of the in-window nudge.
+- `compress.nudgeFrequency` per-request throttle — stacks with pi-dcp's `nudgeEveryTurns` per-turn throttle.
+- Editable prompt overrides — set `experimental.customPrompts: true`, then drop files into `~/.pi/agent/extensions/pi-dcp/prompts/overrides/{soft-nudge,strong-nudge,hard-nudge,iteration-nudge,compress-message,compress-range}.md`.
+- `manualMode.enabled` with `manualMode.automaticStrategies` — same semantics as upstream. Runtime override via `/dcp manual`.
+- Skipped: `pruneNotificationType: "toast"` (no toast UI), `compress.{showCompression,summaryBuffer}` (UI/advanced accounting), `experimental.allowSubAgents` (pi's subagent model differs), `protectedFilePatterns` (no-op when empty).
 
 ## Files
 

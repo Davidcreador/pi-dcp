@@ -11,6 +11,7 @@ import {
 	type ToolDefinition,
 	defineTool,
 } from "@earendil-works/pi-coding-agent";
+import { protectedByRecency } from "../messages.ts";
 import { PROMPTS, type PromptStore } from "../prompts/index.ts";
 import { type CompressToolContext, preflight, reply, storeCompression } from "./shared.ts";
 
@@ -51,7 +52,7 @@ export function createCompressMessageTool(
 			"compress(toolCallIds, topic, summary) — replace older tool outputs with a lossless technical summary to reclaim context.",
 		parameters: Schema,
 		executionMode: "sequential",
-		async execute(_toolCallId, params: CompressMessageParams, _signal, _onUpdate, _ext: ExtensionContext) {
+		async execute(_toolCallId, params: CompressMessageParams, _signal, _onUpdate, ext: ExtensionContext) {
 			const stop = preflight(ctx);
 			if (stop) return stop;
 
@@ -62,6 +63,34 @@ export function createCompressMessageTool(
 					reason: "empty_ids",
 				});
 			}
+
+			// turnProtection guard: refuse upfront if any id is inside the protected
+			// window. Otherwise the pipeline would silently no-op those ids and the
+			// model would never learn its compression didn't take effect.
+			if (ctx.config.turnProtection.enabled) {
+				let branch: unknown[] = [];
+				try {
+					branch = ext.sessionManager.getBranch();
+				} catch {
+					/* best-effort: skip the guard if branch unavailable */
+				}
+				if (branch.length > 0) {
+					const protectedSet = protectedByRecency(
+						(branch as Array<{ type?: string; message?: unknown }>)
+							.filter((e) => e?.type === "message" && e.message)
+							.map((e) => e.message as any),
+						ctx.config.turnProtection.turns,
+					);
+					const overlap = ids.filter((id) => protectedSet.has(id));
+					if (overlap.length > 0) {
+						return reply(
+							`compress refused: ${overlap.length} of ${ids.length} tool-call id(s) are inside the protected window (turnProtection.turns=${ctx.config.turnProtection.turns}). Pick older calls.`,
+							{ refused: true, reason: "protected_window_overlap" },
+						);
+					}
+				}
+			}
+
 			return storeCompression(ctx, ids, params.topic, params.summary);
 		},
 	});

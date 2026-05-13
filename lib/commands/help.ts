@@ -6,7 +6,7 @@ const HELP = [
 	"  /dcp context    — current session token usage + DCP savings",
 	"  /dcp stats      — cumulative DCP savings across all sessions",
 	"  /dcp sweep [n]  — manually compress last n tool results (default: all since last user msg)",
-	"  /dcp manual on|off  — toggle manual mode (LLM cannot auto-call compress)",
+	"  /dcp manual [on|off|status|toggle]  — control manual mode (runtime only — edit config.json to persist)",
 	"  /dcp decompress <id>  — temporarily restore a stored compression",
 	"  /dcp recompress <id>  — re-apply a previously decompressed entry",
 	"",

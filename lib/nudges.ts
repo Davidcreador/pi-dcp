@@ -30,11 +30,21 @@ import { type DcpConfig, resolveModelLimit } from "./config.ts";
 import { PROMPTS, type PromptName, type PromptStore } from "./prompts/index.ts";
 import type { SessionState } from "./state.ts";
 
-/** Count non-user messages back to the most recent user message in the branch.
- *  Returns 0 if no user message is found (fresh session). */
-function messagesSinceLastUser(branch: ReadonlyArray<unknown>): number {
+/**
+ * Count non-user messages back to the most recent user message in the branch.
+ * Returns 0 if no user message is found within `maxScan` entries.
+ *
+ * Bounded scan: even very long sessions only walk back at most `maxScan`
+ * entries. The iteration-nudge fires once we've crossed the configured
+ * threshold, so we never need to look much further back than that.
+ */
+function messagesSinceLastUser(
+	branch: ReadonlyArray<unknown>,
+	maxScan: number,
+): number {
+	const limit = Math.max(0, Math.min(maxScan, branch.length));
 	let count = 0;
-	for (let i = branch.length - 1; i >= 0; i--) {
+	for (let i = branch.length - 1, scanned = 0; i >= 0 && scanned < limit; i--, scanned++) {
 		const entry = branch[i] as { type?: string; message?: { role?: string } };
 		if (entry?.type !== "message" || !entry.message) continue;
 		if (entry.message.role === "user") return count;
@@ -87,7 +97,11 @@ export function makeNudgeHandler(
 			} catch {
 				branch = [];
 			}
-			const since = messagesSinceLastUser(branch);
+			// Bound the walk: a small multiple of the threshold is enough — we
+			// only need to know if `since >= threshold`. 4x gives plenty of
+			// headroom for the re-fire window check below.
+			const scanCap = Math.max(64, config.compress.iterationNudgeThreshold * 4);
+			const since = messagesSinceLastUser(branch, scanCap);
 			if (since >= config.compress.iterationNudgeThreshold) {
 				// Fire at most once per iteration window: track the count at which
 				// we last fired and require another `threshold` messages before

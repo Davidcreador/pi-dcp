@@ -16,6 +16,7 @@ import {
 	defineTool,
 } from "@earendil-works/pi-coding-agent";
 import { PROMPTS, type PromptStore } from "../prompts/index.ts";
+import { protectedByRecency } from "../messages.ts";
 import {
 	type CompressToolContext,
 	branchToolCallIds,
@@ -116,6 +117,26 @@ export function createCompressRangeTool(
 					refused: true,
 					reason: "empty_range",
 				});
+			}
+
+			// If turnProtection is on, any endpoints inside the protected window
+			// would be silently no-op'd at pipeline time. Refuse upfront instead
+			// so the model can pick older endpoints.
+			if (ctx.config.turnProtection.enabled) {
+				const protectedSet = protectedByRecency(
+					// Convert branch -> minimal AnyMessage-shaped view for the helper.
+					(branch as Array<{ type?: string; message?: unknown }>)
+						.filter((e) => e?.type === "message" && e.message)
+						.map((e) => e.message as any),
+					ctx.config.turnProtection.turns,
+				);
+				const overlap = ids.filter((id) => protectedSet.has(id));
+				if (overlap.length > 0) {
+					return reply(
+						`compress refused: ${overlap.length} of ${ids.length} tool call(s) in the range are inside the protected window (turnProtection.turns=${ctx.config.turnProtection.turns}). Pick endpoints older than the last ${ctx.config.turnProtection.turns} user message(s).`,
+						{ refused: true, reason: "protected_window_overlap" },
+					);
+				}
 			}
 
 			return storeCompression(ctx, ids, params.topic, params.summary);

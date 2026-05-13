@@ -191,9 +191,14 @@ export class PromptStore {
 		}
 	}
 
-	/** Look up a prompt. Always returns SOMETHING — never throws. */
+	/**
+	 * Look up a prompt. Always returns a non-empty string — never throws,
+	 * never returns undefined. Falls back through: cache → in-process default
+	 * → empty string (final defense if a caller invents a new name without
+	 * registering it).
+	 */
 	read(name: PromptName): string {
-		return this.cache.get(name) ?? DEFAULT_PROMPTS[name];
+		return this.cache.get(name) ?? DEFAULT_PROMPTS[name] ?? "";
 	}
 
 	/** True if any prompt resolved to a user override. Useful for debug logs. */
