@@ -1,0 +1,62 @@
+{
+  "enabled": true,
+  "debug": false,
+  "pruneNotification": "minimal",
+  "experimental": {
+    "customPrompts": false
+  },
+  "manualMode": {
+    "enabled": false,
+    "automaticStrategies": true
+  },
+  "turnProtection": {
+    "enabled": true,
+    "turns": 3
+  },
+  "compress": {
+    "mode": "range",
+    "permission": "allow",
+    "minContextLimit": 30000,
+    "maxContextLimit": 70000,
+    "modelMinLimits": {
+      "openai/gpt-5.4-mini-fast": 25000,
+      "openai/gpt-5.4-mini": 30000,
+      "openai/gpt-5.5": 45000,
+      "anthropic/claude-haiku-4-5": 30000,
+      "anthropic/claude-sonnet-4-5": 50000,
+      "anthropic/claude-sonnet-4-6": 50000,
+      "anthropic/claude-opus-4-1": 35000,
+      "anthropic/claude-opus-4-5": 35000,
+      "anthropic/claude-opus-4-6": 35000,
+      "anthropic/claude-opus-4-7": 35000
+    },
+    "modelMaxLimits": {
+      "openai/gpt-5.4-mini-fast": 50000,
+      "openai/gpt-5.4-mini": 70000,
+      "openai/gpt-5.5": 100000,
+      "anthropic/claude-haiku-4-5": 70000,
+      "anthropic/claude-sonnet-4-5": 120000,
+      "anthropic/claude-sonnet-4-6": 120000,
+      "anthropic/claude-opus-4-1": 85000,
+      "anthropic/claude-opus-4-5": 85000,
+      "anthropic/claude-opus-4-6": 85000,
+      "anthropic/claude-opus-4-7": 85000
+    },
+    "nudgeEveryTurns": 5,
+    "nudgeFrequency": 3,
+    "iterationNudgeThreshold": 8,
+    "nudgeForce": "strong",
+    "protectedTools": []
+  },
+  "strategies": {
+    "deduplication": {
+      "enabled": true,
+      "protectedTools": []
+    },
+    "purgeErrors": {
+      "enabled": true,
+      "turns": 2,
+      "protectedTools": []
+    }
+  }
+}

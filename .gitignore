@@ -2,8 +2,6 @@
 node_modules/
 *.tsbuildinfo
 
-# user runtime state — regenerated on each pi launch
-# (anchor with leading / so we only ignore the TOP-level prompts dir,
-#  not lib/prompts/ which is the source code)
-/config.json
+# regenerated on each pi launch — leading / anchors to top-level only,
+# so lib/prompts/ (source code) is not affected
 /prompts/
