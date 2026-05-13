@@ -1,0 +1,6 @@
+# pi-dcp local artifacts
+node_modules/
+*.tsbuildinfo
+
+# user runtime state (lives outside repo but symlinks might land here)
+config.json
