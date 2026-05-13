@@ -35,6 +35,7 @@ import { runPipeline } from "./lib/pipeline.ts";
 import { createSessionState } from "./lib/state.ts";
 import { bumpLifetime } from "./lib/stats.ts";
 import { makeNudgeHandler } from "./lib/nudges.ts";
+import { notifyPipelineResult } from "./lib/notifications.ts";
 import { PromptStore } from "./lib/prompts/index.ts";
 import { createCompressMessageTool } from "./lib/tools/compress-message.ts";
 import { createCompressRangeTool } from "./lib/tools/compress-range.ts";
@@ -80,10 +81,13 @@ export default function piDcp(pi: ExtensionAPI): void {
 		compressPermission: config.compress.permission,
 	});
 
-	// 1. The pruning pipeline runs immediately before every LLM call.
-	pi.on("context", (event: ContextEvent, _ctx: ExtensionContext): ContextEventResult | void => {
+	// 1. The pruning pipeline runs immediately before every LLM call. After it
+	//    finishes, we emit user-visible feedback (footer status + optional
+	//    inline toast) gated by config.pruneNotification.
+	pi.on("context", (event: ContextEvent, ctx: ExtensionContext): ContextEventResult | void => {
 		try {
 			const result = runPipeline(event.messages as any, config, state, logger);
+			notifyPipelineResult(ctx, config, state, result);
 			return { messages: result.messages as ContextEvent["messages"] };
 		} catch (err) {
 			logger.error("pipeline crashed — passing messages through unchanged", {

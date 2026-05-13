@@ -6,6 +6,33 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-05-13
+
+### Fixed
+
+- **User-visible feedback for pipeline work.** The `pruneNotification` config
+  knob was declared but never read, so users could go entire sessions seeing
+  no evidence that pi-dcp was running — even though it was, and the lifetime
+  `~/.pi-dcp/stats.json` was accumulating real savings (~200k tokens / 30+
+  sessions in personal use). The bug was zero plumbing between
+  `pruneNotification` and the UI, not the pipeline itself.
+
+### Added
+
+- `lib/notifications.ts` — dispatches feedback after every pipeline pass:
+  - **`pruneNotification: "minimal"`** (default): persistent footer status
+    chip `DCP: ~24.3k saved` that updates whenever new pruning happens.
+    Shows `DCP: idle` on the first context event so users know the extension
+    is wired in.
+  - **`pruneNotification: "detailed"`**: footer status + an inline
+    `ctx.ui.notify` toast for each pass that did work, formatted like
+    `pi-dcp: 2 duplicates, 1 errored call purged (~3.2k tokens)`.
+  - **`pruneNotification: "off"`**: neither.
+- The `context` event handler now passes `ctx` (was `_ctx`) into the new
+  dispatcher.
+
+[0.1.2]: https://github.com/Davidcreador/pi-dcp/releases/tag/v0.1.2
+
 ## [0.1.1] — 2026-05-13
 
 ### Fixed
@@ -82,5 +109,5 @@ First formal release. Full opencode-dcp feature parity, installable via `pi inst
 
 Concept and prompt design ported from [`@tarquinen/opencode-dcp`](https://github.com/Opencode-DCP/opencode-dynamic-context-pruning) by tarquinen.
 
-[Unreleased]: https://github.com/Davidcreador/pi-dcp/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Davidcreador/pi-dcp/compare/v0.1.2...HEAD
 [0.1.0]: https://github.com/Davidcreador/pi-dcp/releases/tag/v0.1.0
