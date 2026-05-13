@@ -19,7 +19,34 @@ export interface DcpConfig {
 	debug: boolean;
 	/** "off" | "minimal" | "detailed" — controls /dcp context-style notifications. */
 	pruneNotification: "off" | "minimal" | "detailed";
+	experimental: {
+		/**
+		 * Enable user-editable prompt overrides under
+		 * ~/.pi/agent/extensions/pi-dcp/prompts/overrides/. When false (default),
+		 * the override directory exists but its contents are ignored. Restart pi
+		 * after toggling this.
+		 */
+		customPrompts: boolean;
+	};
+	manualMode: {
+		/** When true, the compress tool refuses autonomous invocation. */
+		enabled: boolean;
+		/**
+		 * When manualMode.enabled is true, should auto strategies (dedup,
+		 * purgeErrors) still run? Default: true — manual mode normally just
+		 * silences the LLM, not the housekeeping.
+		 */
+		automaticStrategies: boolean;
+	};
 	compress: {
+		/**
+		 * Compression mode controlling the compress tool's parameter surface.
+		 * - "message": tool takes `toolCallIds[]` and compresses individual results.
+		 * - "range":   tool takes `startToolCallId` + `endToolCallId` and compresses
+		 *             every eligible result in that contiguous span. Easier for
+		 *             the model to use on closed work-streams; less surgical.
+		 */
+		mode: "range" | "message";
 		/** Soft floor of context tokens before the LLM is nudged to compress. number or "X%" of context window. */
 		minContextLimit: number | string;
 		/** Soft ceiling — at/above this we push stronger nudges. number or "X%" of context window. */
@@ -30,6 +57,13 @@ export interface DcpConfig {
 		protectedTools: string[];
 		/** Soft nudge will fire at most once every N turns to avoid bloating every request. */
 		nudgeEveryTurns: number;
+		/**
+		 * Additional throttle: soft nudge fires only every Nth context fetch.
+		 * Use this when a single turn can do many tool calls and you don't want
+		 * the nudge appended on every one. Default: 1 (no extra throttling beyond
+		 * nudgeEveryTurns). Set to 5 to fire every 5th fetch.
+		 */
+		nudgeFrequency: number;
 	};
 	strategies: {
 		deduplication: {
@@ -62,12 +96,21 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	enabled: true,
 	debug: false,
 	pruneNotification: "detailed",
+	experimental: {
+		customPrompts: false,
+	},
+	manualMode: {
+		enabled: false,
+		automaticStrategies: true,
+	},
 	compress: {
+		mode: "message",
 		minContextLimit: "30%",
 		maxContextLimit: "60%",
 		permission: "allow",
 		protectedTools: [],
 		nudgeEveryTurns: 5,
+		nudgeFrequency: 1,
 	},
 	strategies: {
 		deduplication: {

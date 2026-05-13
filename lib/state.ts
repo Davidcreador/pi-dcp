@@ -46,6 +46,8 @@ export interface SessionState {
 	appliedCompressionTargets: Set<string>;
 	/** Turn at which we last emitted a soft nudge. Used for throttling. */
 	lastSoftNudgeTurn: number;
+	/** Monotonic counter of before_agent_start invocations — powers nudgeFrequency. */
+	nudgeFetchCount: number;
 }
 
 export function createSessionState(): SessionState {
@@ -65,5 +67,6 @@ export function createSessionState(): SessionState {
 		purgedErrorCallIds: new Set(),
 		appliedCompressionTargets: new Set(),
 		lastSoftNudgeTurn: -Infinity,
+		nudgeFetchCount: 0,
 	};
 }

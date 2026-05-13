@@ -89,6 +89,13 @@ export function runPipeline(
 	state: SessionState,
 	logger: Logger,
 ): PipelineResult {
+	// Manual mode can optionally disable auto strategies (dedup + purgeErrors).
+	// Compressions are user-triggered (sweep or LLM-via-compress), so we always
+	// apply them regardless of manual mode.
+	const manualSilent =
+		(config.manualMode.enabled || state.manualMode) &&
+		!config.manualMode.automaticStrategies;
+
 	const summaries = compressionsByToolCallId(state);
 	const compressionTargets = new Set(summaries.keys());
 
@@ -132,15 +139,17 @@ export function runPipeline(
 		}
 	}
 
-	// 2. Deduplication.
-	const dedup = applyDeduplication(messages, config, state);
-	result.dedupPruned = dedup.prunedCount;
-	result.tokensSaved += dedup.tokensSaved;
+	if (!manualSilent) {
+		// 2. Deduplication.
+		const dedup = applyDeduplication(messages, config, state);
+		result.dedupPruned = dedup.prunedCount;
+		result.tokensSaved += dedup.tokensSaved;
 
-	// 3. Purge errored tool inputs.
-	const purged = applyPurgeErrors(messages, config, state);
-	result.errorInputsPurged = purged.purgedCount;
-	result.tokensSaved += purged.tokensSaved;
+		// 3. Purge errored tool inputs.
+		const purged = applyPurgeErrors(messages, config, state);
+		result.errorInputsPurged = purged.purgedCount;
+		result.tokensSaved += purged.tokensSaved;
+	}
 
 	if (result.dedupPruned || result.errorInputsPurged || result.compressionsApplied) {
 		state.stats.compressionsApplied += result.compressionsApplied;

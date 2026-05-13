@@ -4,10 +4,19 @@
  */
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { DEFAULT_CONFIG, resolveContextLimit } from "../lib/config.ts";
 import { _internal as decompressInternals } from "../lib/commands/decompress.ts";
 import { makeNudgeHandler } from "../lib/nudges.ts";
+import { PromptStore } from "../lib/prompts/index.ts";
 import { createSessionState } from "../lib/state.ts";
+
+function tmpPromptStore(customPromptsEnabled = false) {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-dcp-prompts-"));
+	return new PromptStore({ customPromptsEnabled, promptsDir: dir });
+}
 
 test("resolveContextLimit: percentage", () => {
 	assert.equal(resolveContextLimit("50%", 200_000), 100_000);
@@ -47,7 +56,7 @@ test("soft nudge fires only once every nudgeEveryTurns turns", async () => {
 	cfg.compress.maxContextLimit = 1_000_000; // never over the ceiling = soft only
 	cfg.compress.nudgeEveryTurns = 3;
 	const state = createSessionState();
-	const handler = makeNudgeHandler(cfg, state);
+	const handler = makeNudgeHandler(cfg, state, tmpPromptStore());
 	const ctx = {
 		getContextUsage: () => ({ tokens: 100_000, contextWindow: 200_000, percent: 50 }),
 	} as any;
@@ -71,7 +80,7 @@ test("hard nudge fires every turn when over maxContextLimit", async () => {
 	cfg.compress.minContextLimit = 0;
 	cfg.compress.maxContextLimit = 50_000;
 	const state = createSessionState();
-	const handler = makeNudgeHandler(cfg, state);
+	const handler = makeNudgeHandler(cfg, state, tmpPromptStore());
 	const ctx = {
 		getContextUsage: () => ({ tokens: 150_000, contextWindow: 200_000, percent: 75 }),
 	} as any;
@@ -89,7 +98,7 @@ test("manual mode suppresses nudges", async () => {
 	cfg.compress.minContextLimit = 0;
 	const state = createSessionState();
 	state.manualMode = true;
-	const handler = makeNudgeHandler(cfg, state);
+	const handler = makeNudgeHandler(cfg, state, tmpPromptStore());
 	const ctx = {
 		getContextUsage: () => ({ tokens: 999_999, contextWindow: 200_000, percent: 99 }),
 	} as any;

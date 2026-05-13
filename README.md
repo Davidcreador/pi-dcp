@@ -53,9 +53,14 @@ A starter `config.json` is written to `~/.pi/agent/extensions/pi-dcp/` on first 
 ## How it differs from upstream opencode-dcp
 
 - Uses pi's built-in `ctx.getContextUsage()` instead of `@anthropic-ai/tokenizer`. Per-message savings are approximated with the ~4-chars-per-token heuristic.
-- Single `range`-mode compression only (no experimental per-message mode yet).
-- No prompt override files, no auto-update, no manual-mode "automaticStrategies" knob (manual mode here only disables the LLM-driven compress tool; auto dedup/purge follow `strategies.*.enabled`).
-- Soft/hard nudges live in `before_agent_start` system-prompt overrides rather than per-request injection.
+- No auto-update from npm (lives in `~/.pi`; `git pull` to update).
+- Soft/hard nudges live in `before_agent_start` system-prompt overrides rather than per-request injection (functionally equivalent).
+
+Feature parity:
+- `compress.mode: "range" | "message"` — both implemented; `"message"` is the default.
+- Editable prompt overrides — set `experimental.customPrompts: true`, then drop files into `~/.pi/agent/extensions/pi-dcp/prompts/overrides/`.
+- `manualMode.enabled` with `manualMode.automaticStrategies` — same semantics as upstream.
+- `nudgeFrequency` per-request throttle — plus pi-dcp's `nudgeEveryTurns` per-turn throttle stacked on top.
 
 ## Files
 

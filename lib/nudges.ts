@@ -1,20 +1,16 @@
 /**
  * System-prompt nudges that encourage the model to call `compress` when the
- * conversation is approaching the configured maxContextLimit.
+ * conversation approaches the configured maxContextLimit.
  *
- * Throttling rules:
- *   - usage < minContextLimit                  → no nudge (cheapest path)
- *   - minContextLimit <= usage < maxContextLimit → SOFT nudge, but only once
- *                                                  every `nudgeEveryTurns`
- *                                                  turns to avoid bloating
- *                                                  every request
- *   - usage >= maxContextLimit                 → HARD nudge every turn (we
- *                                                  WANT to bias the model
- *                                                  toward compression)
+ * Throttling rules (any one returning false stops the nudge):
+ *   1. usage < minContextLimit                  → no nudge
+ *   2. manualMode.enabled                       → no nudge (LLM can't compress anyway)
+ *   3. soft nudges: count++ % nudgeFrequency !== 0
+ *      AND (turnIndex - lastSoftNudgeTurn) < nudgeEveryTurns
+ *   4. usage >= maxContextLimit                 → HARD nudge every fetch (we want urgency)
  *
- * We hook `before_agent_start` and return a `systemPrompt` override — pi
- * chains multiple extension overrides cleanly. Soft / hard nudges are
- * separate so the model can see escalating urgency.
+ * Soft text and hard text both come from PromptStore, so the user can override
+ * either by dropping a file in prompts/overrides/.
  */
 import type {
 	BeforeAgentStartEvent,
@@ -22,32 +18,23 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { type DcpConfig, resolveContextLimit } from "./config.ts";
+import { PROMPTS, type PromptStore } from "./prompts/index.ts";
 import type { SessionState } from "./state.ts";
 
-const SOFT_NUDGE = [
-	"",
-	"## pi-dcp context note",
-	"You have a `compress` tool. When old tool results are no longer needed verbatim",
-	"but their facts still matter, call `compress(toolCallIds, topic, summary)` to",
-	"replace them with a lossless technical summary. Compress closed work-streams",
-	"only — never compress your most recent turn or in-flight work.",
-].join("\n");
-
-const HARD_NUDGE = [
-	"",
-	"## pi-dcp — context filling up",
-	"You are approaching the model's context limit. Strongly consider calling the",
-	"`compress` tool on older completed work-streams before continuing. Preserve",
-	"all concrete facts (file paths, line numbers, decisions, errors).",
-].join("\n");
-
-export function makeNudgeHandler(config: DcpConfig, state: SessionState) {
+export function makeNudgeHandler(
+	config: DcpConfig,
+	state: SessionState,
+	prompts: PromptStore,
+) {
 	return async (
 		event: BeforeAgentStartEvent,
 		ctx: ExtensionContext,
 	): Promise<BeforeAgentStartEventResult | void> => {
 		if (config.compress.permission === "deny") return;
-		if (state.manualMode) return;
+		if (config.manualMode.enabled || state.manualMode) return;
+
+		state.nudgeFetchCount++;
+
 		const usage = ctx.getContextUsage();
 		if (!usage || usage.tokens === null || usage.contextWindow <= 0) return;
 
@@ -58,12 +45,17 @@ export function makeNudgeHandler(config: DcpConfig, state: SessionState) {
 
 		const isHard = usage.tokens >= maxLimit;
 		if (!isHard) {
+			// Per-request throttle: only emit on every Nth fetch.
+			const freq = Math.max(1, config.compress.nudgeFrequency);
+			if (state.nudgeFetchCount % freq !== 0) return;
+
+			// Per-turn throttle: limit to once every N turns.
 			const everyN = Math.max(1, config.compress.nudgeEveryTurns);
 			if (state.turnIndex - state.lastSoftNudgeTurn < everyN) return;
 			state.lastSoftNudgeTurn = state.turnIndex;
 		}
 
-		const nudge = isHard ? HARD_NUDGE : SOFT_NUDGE;
+		const nudge = prompts.read(isHard ? PROMPTS.hardNudge : PROMPTS.softNudge);
 		const base = event.systemPrompt ?? "";
 		return { systemPrompt: `${base}\n${nudge}` };
 	};

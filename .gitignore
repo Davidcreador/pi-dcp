@@ -2,5 +2,6 @@
 node_modules/
 *.tsbuildinfo
 
-# user runtime state (lives outside repo but symlinks might land here)
+# user runtime state — regenerated on each pi launch
 config.json
+prompts/

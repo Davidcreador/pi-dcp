@@ -1,19 +1,26 @@
 /**
  * pi-dcp — Dynamic Context Pruning for Pi.
  *
- * MVP port of opencode-dynamic-context-pruning (AGPL-3.0).
+ * Port of opencode-dynamic-context-pruning (AGPL-3.0).
  *
- * Wires three things into pi:
+ * Wires the following into pi:
  *   1. A `context` handler that prunes the message array on every LLM call
- *      (deduplication + errored-input purge + stored compressions). The
- *      handler returns a freshly built array — message objects are never
- *      mutated in place because they share identity with persisted session
- *      entries.
+ *      (deduplication + errored-input purge + stored compressions). Returns
+ *      a freshly built array — message objects share identity with persisted
+ *      session entries and must not be mutated in place.
  *   2. A `compress` tool the LLM can call to summarize closed work-streams.
- *   3. A `/dcp` slash command surface for inspecting/controlling DCP.
+ *      Two variants: message-mode (toolCallIds[]) and range-mode (start+end).
+ *      One or the other is registered based on `config.compress.mode`.
+ *   3. A `before_agent_start` handler that appends throttled system-prompt
+ *      nudges as context fills up.
+ *   4. A `/dcp` slash command surface for inspecting/controlling DCP.
  *
  * Config lives in ~/.pi/agent/extensions/pi-dcp/config.json (auto-created on
  * first run) with optional per-project override at <cwd>/.pi/dcp.json.
+ *
+ * Prompts: defaults regenerated at init under prompts/defaults/; user
+ * overrides honoured under prompts/overrides/ when `experimental.customPrompts`
+ * is enabled.
  */
 import type {
 	ContextEvent,
@@ -28,7 +35,9 @@ import { runPipeline } from "./lib/pipeline.ts";
 import { createSessionState } from "./lib/state.ts";
 import { bumpLifetime } from "./lib/stats.ts";
 import { makeNudgeHandler } from "./lib/nudges.ts";
-import { createCompressTool } from "./lib/compress-tool.ts";
+import { PromptStore } from "./lib/prompts/index.ts";
+import { createCompressMessageTool } from "./lib/tools/compress-message.ts";
+import { createCompressRangeTool } from "./lib/tools/compress-range.ts";
 import { handleHelp } from "./lib/commands/help.ts";
 import { handleStats } from "./lib/commands/stats.ts";
 import { makeContextCommand } from "./lib/commands/context.ts";
@@ -50,10 +59,20 @@ export default function piDcp(pi: ExtensionAPI): void {
 		return;
 	}
 
+	const prompts = new PromptStore({
+		customPromptsEnabled: config.experimental.customPrompts,
+	});
 	const state = createSessionState();
+	// Seed runtime manualMode from config so the user can opt in declaratively.
+	state.manualMode = config.manualMode.enabled;
+
 	bumpLifetime({ sessionsTouched: 1 });
 	logger.info("pi-dcp initialized", {
 		enabled: config.enabled,
+		mode: config.compress.mode,
+		manualMode: state.manualMode,
+		customPrompts: config.experimental.customPrompts,
+		hasOverrides: prompts.hasAnyOverride(),
 		strategies: {
 			deduplication: config.strategies.deduplication.enabled,
 			purgeErrors: config.strategies.purgeErrors.enabled,
@@ -62,10 +81,6 @@ export default function piDcp(pi: ExtensionAPI): void {
 	});
 
 	// 1. The pruning pipeline runs immediately before every LLM call.
-	//    We return a fresh ContextEventResult — pi accepts in-place mutation
-	//    *or* a returned messages array; we use the latter because message
-	//    objects share identity with persisted session entries and must not
-	//    be mutated. See lib/pipeline.ts and lib/messages.ts.
 	pi.on("context", (event: ContextEvent, _ctx: ExtensionContext): ContextEventResult | void => {
 		try {
 			const result = runPipeline(event.messages as any, config, state, logger);
@@ -94,16 +109,20 @@ export default function piDcp(pi: ExtensionAPI): void {
 		}
 	});
 
-	// 4. Compress tool (skip if user denied it at config level).
+	// 4. Compress tool: one variant based on configured mode.
 	if (config.compress.permission !== "deny") {
-		pi.registerTool(createCompressTool({ state, logger, config }));
+		const toolCtx = { state, logger, config };
+		if (config.compress.mode === "range") {
+			pi.registerTool(createCompressRangeTool(toolCtx, prompts));
+		} else {
+			pi.registerTool(createCompressMessageTool(toolCtx, prompts));
+		}
 	}
 
-	// 5. System-prompt nudges encouraging compress when near context ceiling.
-	pi.on("before_agent_start", makeNudgeHandler(config, state));
+	// 5. Throttled system-prompt nudges.
+	pi.on("before_agent_start", makeNudgeHandler(config, state, prompts));
 
-	// 6. /dcp slash commands. All registered under "dcp"; the first arg
-	//    selects the subcommand to keep the surface small.
+	// 6. /dcp slash commands.
 	pi.registerCommand("dcp", {
 		description: "Dynamic context pruning — see /dcp for subcommands",
 		getArgumentCompletions(prefix) {
