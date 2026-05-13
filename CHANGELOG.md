@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-05-13
+
+### Fixed
+
+- Added `typebox` to `peerDependencies` per the official Pi packages spec.
+  Previously typebox was imported but not declared; npm install would resolve
+  it transitively from `@earendil-works/pi-coding-agent` but the spec calls
+  for an explicit `"*"` peer-dep alongside `@earendil-works/pi-coding-agent`.
+
+### Added
+
+- `pi.image` field in `package.json` pointing to `assets/preview.png` so
+  pi-dcp shows a preview card on [pi.dev/packages](https://pi.dev/packages).
+
+[0.1.1]: https://github.com/Davidcreador/pi-dcp/releases/tag/v0.1.1
+
 ## [0.1.0] — 2026-05-13
 
 ### Distribution
@@ -66,5 +82,5 @@ First formal release. Full opencode-dcp feature parity, installable via `pi inst
 
 Concept and prompt design ported from [`@tarquinen/opencode-dcp`](https://github.com/Opencode-DCP/opencode-dynamic-context-pruning) by tarquinen.
 
-[Unreleased]: https://github.com/Davidcreador/pi-dcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Davidcreador/pi-dcp/compare/v0.1.1...HEAD
 [0.1.0]: https://github.com/Davidcreador/pi-dcp/releases/tag/v0.1.0

@@ -1,6 +1,6 @@
 {
   "name": "@davecodes/pi-dcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dynamic Context Pruning for Pi — port of opencode-dcp. Deduplication, error-input purge, and an LLM-callable compress tool to keep long sessions cheap.",
   "type": "module",
   "author": "davecodes",
@@ -29,6 +29,7 @@
     "index.ts",
     "lib/**/*.ts",
     "skills/**/*",
+    "assets/preview.png",
     "config.example.json",
     "README.md",
     "CHANGELOG.md",
@@ -41,7 +42,8 @@
     "prepublishOnly": "npm run check"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
   },
   "publishConfig": {
     "access": "public"
@@ -52,6 +54,7 @@
     ],
     "skills": [
       "./skills"
-    ]
+    ],
+    "image": "https://raw.githubusercontent.com/Davidcreador/pi-dcp/main/assets/preview.png"
   }
 }
