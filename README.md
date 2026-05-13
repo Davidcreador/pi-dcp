@@ -1,4 +1,4 @@
-# pi-dcp
+# Pi-Dynamic-Context-Pruning
 
 [![CI](https://github.com/Davidcreador/pi-dcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Davidcreador/pi-dcp/actions/workflows/ci.yml)
 [![License: AGPL v3+](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
