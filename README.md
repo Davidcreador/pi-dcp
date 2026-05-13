@@ -1,6 +1,12 @@
 # pi-dcp
 
-Dynamic Context Pruning for [Pi](https://github.com/earendil-works/pi-coding-agent). A port of [`@tarquinen/opencode-dcp`](https://github.com/Opencode-DCP/opencode-dynamic-context-pruning) (AGPL-3.0) tailored to pi's extension API.
+[![CI](https://github.com/Davidcreador/pi-dcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Davidcreador/pi-dcp/actions/workflows/ci.yml)
+[![License: AGPL v3+](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![TypeScript](https://img.shields.io/badge/types-TypeScript-3178c6.svg)](https://www.typescriptlang.org/)
+[![Tests](https://img.shields.io/badge/tests-55%20passing-brightgreen.svg)](#develop)
+
+**Dynamic Context Pruning for [Pi](https://github.com/earendil-works/pi/tree/main/packages/coding-agent).**
+A faithful port of [`@tarquinen/opencode-dcp`](https://github.com/Opencode-DCP/opencode-dynamic-context-pruning) tailored to pi's extension API. Zero npm dependencies at runtime.
 
 Cuts token usage in long sessions through three independent mechanisms:
 

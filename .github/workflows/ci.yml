@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Node 22+ is required for --experimental-strip-types.
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # pi-dcp declares @earendil-works/pi-coding-agent as a peer dependency.
+      # npm install resolves dev/peer deps for type-checking only; nothing
+      # actually runs against pi in CI — we only verify tsc and unit tests.
+      - name: Install dev dependencies
+        run: |
+          npm install --no-save --silent \
+            typescript@latest \
+            @earendil-works/pi-coding-agent@latest
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
+
+      - name: Unit tests
+        run: node --experimental-strip-types --test test/*.test.ts
