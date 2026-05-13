@@ -69,20 +69,28 @@ Plus three nudge surfaces that bias the model toward compressing:
 
 ## Install
 
-Use pi's built-in installer:
+Three ways. Pick one:
+
+**npm** (recommended — versioned, easy to update):
+
+```bash
+pi install npm:@davecodes/pi-dcp
+```
+
+**git** (always tracks `main`):
 
 ```bash
 pi install git:github.com/Davidcreador/pi-dcp
 # or:  pi install https://github.com/Davidcreador/pi-dcp
 ```
 
-That's it. Pi clones the repo, registers the package in `~/.pi/agent/settings.json`, and the extension is live on the next launch.
-
-Alternative (manual clone, if you want to hack on the code):
+**manual clone** (for hacking on the code):
 
 ```bash
 git clone git@github.com:Davidcreador/pi-dcp.git ~/.pi/agent/extensions/pi-dcp
 ```
+
+All three paths produce the same runtime behavior. Pi auto-discovers the extension via its `pi.extensions` package.json entry.
 
 Either way, **user state always lives at `~/.pi-dcp/`** — not next to the code. That directory holds:
 
@@ -99,7 +107,7 @@ Either way, **user state always lives at `~/.pi-dcp/`** — not next to the code
 To **update**:
 
 ```bash
-pi update git:github.com/Davidcreador/pi-dcp
+pi update npm:@davecodes/pi-dcp   # or whichever source you used
 ```
 
 ## Quick start

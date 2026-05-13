@@ -1,0 +1,54 @@
+name: Publish to npm
+
+# Fires on the same v*.*.* tag pushes as the Release workflow. The two run
+# in parallel; npm publish needs an NPM_TOKEN repository secret.
+#
+# To enable:
+#   1. https://www.npmjs.com/settings/<your-user>/tokens → create
+#      "Automation" token (does NOT require 2FA on use)
+#   2. Settings → Secrets and variables → Actions → New secret
+#      Name: NPM_TOKEN  Value: <paste>
+#
+# Until the secret is set this workflow will fail at the publish step but
+# won't block the GitHub Release flow.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  id-token: write           # required for npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      # Same dev-dep dance as CI \u2014 lets prepublishOnly run tsc + tests.
+      - name: Install dev dependencies
+        run: |
+          npm install --no-save --silent \
+            typescript@latest \
+            @earendil-works/pi-coding-agent@latest
+
+      # Sanity-check the version in package.json matches the tag.
+      - name: Verify tag matches package.json
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag v$TAG_VERSION but package.json says $PKG_VERSION. Bump package.json and re-tag."
+            exit 1
+          fi
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

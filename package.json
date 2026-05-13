@@ -1,9 +1,8 @@
 {
-  "name": "pi-dcp",
+  "name": "@davecodes/pi-dcp",
   "version": "0.1.0",
   "description": "Dynamic Context Pruning for Pi — port of opencode-dcp. Deduplication, error-input purge, and an LLM-callable compress tool to keep long sessions cheap.",
   "type": "module",
-  "private": true,
   "author": "davecodes",
   "license": "AGPL-3.0-or-later",
   "main": "./index.ts",
@@ -26,13 +25,26 @@
     "agent",
     "opencode-dcp-port"
   ],
+  "files": [
+    "index.ts",
+    "lib/**/*.ts",
+    "skills/**/*",
+    "config.example.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
     "test": "node --experimental-strip-types --test test/*.test.ts",
-    "check": "npm run typecheck && npm run test"
+    "check": "npm run typecheck && npm run test",
+    "prepublishOnly": "npm run check"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "pi": {
     "extensions": [

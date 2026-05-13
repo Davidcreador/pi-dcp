@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] — 2026-05-13
 
+### Distribution
+
+- Published as **`@davecodes/pi-dcp`** on npm. Install via `pi install npm:@davecodes/pi-dcp`.
+
 First formal release. Full opencode-dcp feature parity, installable via `pi install`.
 
 ### Added
