@@ -7,7 +7,6 @@
     "name": "davecodes"
   },
   "license": "AGPL-3.0-or-later",
-  "main": "./index.ts",
   "homepage": "https://github.com/Davidcreador/pi-dcp#readme",
   "repository": {
     "type": "git",
