@@ -1,5 +1,30 @@
+/**
+ * /dcp context
+ *
+ * Show the current session's context usage and DCP savings as an overlay
+ * panel. In non-interactive modes (print/RPC) the panel falls back to a
+ * multi-line toast, see showInfoPanel for details.
+ */
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { SessionState } from "../state.ts";
+import type { PanelRow, PanelSection } from "../ui/info-panel.ts";
+import { showInfoPanel } from "../ui/info-panel.ts";
+
+function formatTokens(n: number): string {
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+	return String(n);
+}
+
+/**
+ * Build a Unicode bar of `filled / total * width` filled cells. Used to give
+ * a quick at-a-glance view of how close we are to the model's context window.
+ */
+function progressBar(percent: number, width = 24): string {
+	const clamped = Math.max(0, Math.min(100, percent));
+	const filled = Math.round((clamped / 100) * width);
+	return "▰".repeat(filled) + "▱".repeat(Math.max(0, width - filled));
+}
 
 export function makeContextCommand(state: SessionState) {
 	return async function handleContext(
@@ -7,31 +32,88 @@ export function makeContextCommand(state: SessionState) {
 		ctx: ExtensionCommandContext,
 	): Promise<void> {
 		const u = ctx.getContextUsage();
-		const lines: string[] = ["pi-dcp / current context"];
+
+		// Usage section. Drives the title-bar feel — bar + tokens + percent.
+		const usageRows: PanelRow[] = [];
 		if (!u || u.tokens === null) {
-			lines.push("  context usage: unknown (no recent LLM call yet)");
+			usageRows.push({
+				kind: "text",
+				text: "context usage: unknown (no recent LLM call yet)",
+			});
 		} else {
-			const pct = u.percent === null ? "?" : `${u.percent.toFixed(1)}%`;
-			lines.push(`  tokens: ${u.tokens.toLocaleString()} / ${u.contextWindow.toLocaleString()} (${pct})`);
+			const pct = u.percent ?? 0;
+			usageRows.push({
+				kind: "kv",
+				label: "tokens",
+				value: `${u.tokens.toLocaleString()} / ${u.contextWindow.toLocaleString()} (${pct.toFixed(1)}%)`,
+			});
+			usageRows.push({
+				kind: "text",
+				text: progressBar(pct),
+			});
 		}
-		lines.push("");
-		lines.push(`  session savings:`);
-		lines.push(`    duplicate tool results pruned: ${state.stats.dedupPruned}`);
-		lines.push(`    errored tool inputs purged:    ${state.stats.errorInputsPurged}`);
-		lines.push(`    compressions applied:          ${state.stats.compressionsApplied}`);
-		lines.push(`    estimated tokens saved:        ~${state.stats.tokensSaved.toLocaleString()}`);
-		lines.push("");
+
+		const sections: PanelSection[] = [
+			{ rows: usageRows },
+			{
+				heading: "Session savings",
+				rows: [
+					{
+						kind: "kv",
+						label: "duplicate tool results pruned",
+						value: state.stats.dedupPruned.toLocaleString(),
+					},
+					{
+						kind: "kv",
+						label: "errored tool inputs purged",
+						value: state.stats.errorInputsPurged.toLocaleString(),
+					},
+					{
+						kind: "kv",
+						label: "compressions applied",
+						value: state.stats.compressionsApplied.toLocaleString(),
+					},
+					{
+						kind: "kv",
+						label: "estimated tokens saved",
+						value: `~${formatTokens(state.stats.tokensSaved)}`,
+						valueColor: "success",
+					},
+				],
+			},
+		];
+
 		const active = [...state.compressions.values()].filter((r) => !r.suspended);
 		if (active.length === 0) {
-			lines.push("  no active compressions");
+			sections.push({
+				heading: "Active compressions",
+				rows: [{ kind: "text", text: "(none)" }],
+			});
 		} else {
-			lines.push("  active compressions:");
-			for (const r of active) {
-				lines.push(`    #${r.id} — ${r.topic} (${r.toolCallIds.length} call(s))`);
-			}
+			sections.push({
+				heading: "Active compressions",
+				rows: active.map((r) => ({
+					kind: "kv" as const,
+					label: `#${r.id}`,
+					value: `${r.topic}  (${r.toolCallIds.length} call${r.toolCallIds.length === 1 ? "" : "s"})`,
+				})),
+			});
 		}
-		lines.push("");
-		lines.push(`  manual mode: ${state.manualMode ? "ON" : "off"}`);
-		ctx.ui.notify(lines.join("\n"), "info");
+
+		sections.push({
+			rows: [
+				{
+					kind: "kv",
+					label: "manual mode",
+					value: state.manualMode ? "ON" : "off",
+					valueColor: state.manualMode ? "warning" : undefined,
+				},
+			],
+		});
+
+		await showInfoPanel(ctx, {
+			title: "pi-dcp / current context",
+			sections,
+		});
 	};
 }
