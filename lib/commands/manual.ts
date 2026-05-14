@@ -10,7 +10,7 @@ import type { SessionState } from "../state.ts";
  * is false in config.
  *
  * Note: this command updates the runtime flag only. To make it persistent across
- * pi restarts, edit `manualMode.enabled` in ~/.pi/agent/extensions/pi-dcp/config.json.
+ * pi restarts, edit `manualMode.enabled` in ~/.pi-dcp/config.json.
  */
 export function makeManualCommand(state: SessionState) {
 	return async function handleManual(args: string, ctx: ExtensionCommandContext): Promise<void> {

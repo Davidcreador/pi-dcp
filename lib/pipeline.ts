@@ -144,6 +144,10 @@ export function runPipeline(
 				state.appliedCompressionTargets.add(m.toolCallId);
 				result.compressionsApplied++;
 				result.tokensSaved += saved;
+				// Mirror the per-strategy bookkeeping pattern: keep per-session
+				// stats in sync so the footer chip + /dcp context include the
+				// tokens compression saves, not just dedup + purgeErrors.
+				state.stats.tokensSaved += saved;
 			}
 		}
 	}

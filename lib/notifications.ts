@@ -19,6 +19,7 @@
  */
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { DcpConfig } from "./config.ts";
+import type { Logger } from "./logger.ts";
 import type { PipelineResult } from "./pipeline.ts";
 import type { SessionState } from "./state.ts";
 
@@ -67,32 +68,64 @@ export function notifyPipelineResult(
 	config: DcpConfig,
 	state: SessionState,
 	result: PipelineResult,
+	logger?: Logger,
 ): void {
 	const mode = config.pruneNotification;
-	if (mode === "off") return;
-	if (!ctx.hasUI) return; // print / RPC modes have no UI surface
+	if (mode === "off") {
+		logger?.info("notify skipped: pruneNotification=off");
+		return;
+	}
+	if (!ctx.hasUI) {
+		logger?.info("notify skipped: ctx.hasUI=false (non-interactive mode)");
+		return;
+	}
 
 	const didWork =
 		result.dedupPruned > 0 ||
 		result.errorInputsPurged > 0 ||
 		result.compressionsApplied > 0;
 
+	const footerText = buildFooterText(state);
+
 	// Footer status — always reflect lifetime session totals, including
 	// "DCP: idle" on the first context event so the user knows the extension
 	// is wired in. Set on every call: the TUI dedupes identical strings, and
 	// the cost is negligible.
+	let footerOk = false;
 	try {
-		ctx.ui.setStatus(STATUS_KEY, buildFooterText(state));
-	} catch {
-		// Footer not available (e.g. RPC mode); ignore silently.
+		ctx.ui.setStatus(STATUS_KEY, footerText);
+		footerOk = true;
+	} catch (err) {
+		logger?.warn("setStatus failed", {
+			error: err instanceof Error ? err.message : String(err),
+		});
 	}
 
 	// Inline toast — only on "detailed", only when this pass did work.
+	let toastFired = false;
 	if (mode === "detailed" && didWork) {
+		const text = buildToastText(result);
 		try {
-			ctx.ui.notify(buildToastText(result), "info");
-		} catch {
-			// Same fallback as above.
+			ctx.ui.notify(text, "info");
+			toastFired = true;
+		} catch (err) {
+			logger?.warn("notify failed", {
+				error: err instanceof Error ? err.message : String(err),
+				text,
+			});
 		}
 	}
+
+	logger?.info("notify pass", {
+		mode,
+		didWork,
+		footerText,
+		footerOk,
+		toastFired,
+		result: {
+			dedupPruned: result.dedupPruned,
+			errorInputsPurged: result.errorInputsPurged,
+			compressionsApplied: result.compressionsApplied,
+		},
+	});
 }

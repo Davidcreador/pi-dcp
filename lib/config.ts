@@ -2,8 +2,8 @@
  * DCP configuration.
  *
  * Lookup order (later wins, shallow-merged top-level + deep-merged nested objects):
- *   1. ~/.pi/agent/extensions/pi-dcp/config.json (global default)
- *   2. <cwd>/.pi/dcp.json                        (project override)
+ *   1. ~/.pi-dcp/config.json (global default)
+ *   2. <cwd>/.pi/dcp.json    (project override)
  *
  * Both files are optional. On first run a commented starter is written to (1)
  * so the user can discover settings without reading the README.
@@ -31,9 +31,9 @@ export interface DcpConfig {
 	experimental: {
 		/**
 		 * Enable user-editable prompt overrides under
-		 * ~/.pi/agent/extensions/pi-dcp/prompts/overrides/. When false (default),
-		 * the override directory exists but its contents are ignored. Restart pi
-		 * after toggling this.
+		 * ~/.pi-dcp/prompts/overrides/. When false (default), the override
+		 * directory exists but its contents are ignored. Restart pi after
+		 * toggling this.
 		 */
 		customPrompts: boolean;
 	};
@@ -280,23 +280,9 @@ export function loadConfig(
 }
 
 /**
- * Resolve a context limit setting (number or "X%" string) against the model's
- * context window. Returns a token count. Falls back to a generous default if
- * the percentage cannot be applied (e.g. context window unknown).
- */
-/**
- * Resolve a min/max context-limit setting against the model's context window.
- * Accepts:
- *   - a non-negative number          → used as-is (tokens). 0 means "always above the floor".
- *   - a percentage string "X%"       → floor(X/100 * contextWindow)
- *   - a bare numeric string "12345"  → parsed as a number
- *
- * Junk values fall back to the safest interpretation — for a floor this is
- * "never trigger nudges" (= return contextWindow), for the caller's purposes.
- */
-/**
  * Pick the effective limit for the active model. If `overrides` has a matching
- * `"<provider>/<id>"` entry we use that; otherwise we return the global default.
+ * `"<provider>/<id>"` entry we use that; otherwise we fall back to the global
+ * `globalSetting`. The chosen value is then resolved by `resolveContextLimit`.
  */
 export function resolveModelLimit(
 	globalSetting: number | string,
@@ -313,6 +299,17 @@ export function resolveModelLimit(
 	return resolveContextLimit(globalSetting, contextWindow);
 }
 
+/**
+ * Resolve a min/max context-limit setting against the model's context window.
+ * Accepts:
+ *   - a non-negative number          → used as-is (tokens). 0 means "always above the floor".
+ *   - a percentage string "X%"       → floor(X/100 * contextWindow)
+ *   - a bare numeric string "12345"  → parsed as a number
+ *
+ * Falls back to the model's contextWindow (or 100k as a last resort) when the
+ * value is junk. For a floor this means "never trigger soft nudges"; for a
+ * ceiling it means "never trigger hard nudges". Both are safe defaults.
+ */
 export function resolveContextLimit(
 	setting: number | string,
 	contextWindow: number | undefined,

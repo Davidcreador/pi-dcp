@@ -67,12 +67,22 @@ export function createCompressMessageTool(
 			// turnProtection guard: refuse upfront if any id is inside the protected
 			// window. Otherwise the pipeline would silently no-op those ids and the
 			// model would never learn its compression didn't take effect.
+			//
+			// Fail-closed when the branch can't be read — same posture as range
+			// mode. Letting the call through with no guard would store a
+			// compression the pipeline silently ignores for any in-window ids.
 			if (ctx.config.turnProtection.enabled) {
-				let branch: unknown[] = [];
+				let branch: unknown[];
 				try {
 					branch = ext.sessionManager.getBranch();
-				} catch {
-					/* best-effort: skip the guard if branch unavailable */
+				} catch (e) {
+					ctx.logger.error("compress message: failed to read branch", {
+						error: e instanceof Error ? e.message : String(e),
+					});
+					return reply("compress refused: could not read session branch.", {
+						refused: true,
+						reason: "branch_read_failed",
+					});
 				}
 				if (branch.length > 0) {
 					const protectedSet = protectedByRecency(

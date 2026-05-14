@@ -197,6 +197,39 @@ test("stored compression replaces tool result with placeholder", () => {
 	assert.equal((msgs[1] as ToolResultMessage).content[0].text!.length, 40_000);
 });
 
+// Regression test for an audit finding: compression token savings were being
+// added to `result.tokensSaved` (so lifetime stats.json was correct) but NOT
+// to `state.stats.tokensSaved`, so the footer chip and /dcp context
+// understated savings by exactly the compression amount.
+test("compression updates BOTH result.tokensSaved and state.stats.tokensSaved", () => {
+	const BIG = "x".repeat(40_000); // ~10k tokens by the 4 chars/token heuristic
+	const msgs: AnyMessage[] = [
+		mkAssistantWithCall("c1", "read", { path: "huge.log" }),
+		mkToolResult("c1", "read", BIG),
+	];
+	const state = createSessionState();
+	state.compressions.set(11, {
+		id: 11,
+		createdAt: 0,
+		toolCallIds: ["c1"],
+		summary: "summary",
+		topic: "noise log",
+		tokensSaved: 0,
+		suspended: false,
+	});
+	state.nextCompressionId = 12;
+
+	const r = runPipeline(msgs, lenientConfig(), state, silentLogger);
+	assert.equal(r.compressionsApplied, 1);
+	assert.ok(r.tokensSaved > 0, "result.tokensSaved should be > 0 after compression");
+	assert.equal(
+		state.stats.tokensSaved,
+		r.tokensSaved,
+		"state.stats.tokensSaved must mirror result.tokensSaved (footer/UI rely on it)",
+	);
+	assert.equal(state.stats.compressionsApplied, 1);
+});
+
 test("suspended compression does NOT apply (decompress simulation)", () => {
 	const msgs: AnyMessage[] = [
 		mkAssistantWithCall("c1", "read", { path: "x" }),

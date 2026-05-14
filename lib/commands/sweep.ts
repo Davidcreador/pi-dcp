@@ -19,10 +19,18 @@ import type { CompressionRecord, SessionState } from "../state.ts";
 export function makeSweepCommand(state: SessionState, config: DcpConfig, logger: Logger) {
 	return async function handleSweep(args: string, ctx: ExtensionCommandContext): Promise<void> {
 		const arg = args.trim();
-		const parsed = parseInt(arg, 10);
-		const userLimit = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-		if (arg && userLimit === undefined) {
-			ctx.ui.notify(`pi-dcp sweep: "${arg}" is not a positive integer; ignoring`, "warning");
+		// Strict: only accept pure positive-integer arguments. parseInt("5abc")
+		// silently returns 5 which is surprising and inconsistent with how
+		// /dcp decompress|recompress parse their ids.
+		let userLimit: number | undefined;
+		if (arg) {
+			if (/^\d+$/.test(arg)) {
+				const n = Number(arg);
+				if (Number.isInteger(n) && n > 0) userLimit = n;
+			}
+			if (userLimit === undefined) {
+				ctx.ui.notify(`pi-dcp sweep: "${arg}" is not a positive integer; ignoring`, "warning");
+			}
 		}
 
 		const sm = ctx.sessionManager;

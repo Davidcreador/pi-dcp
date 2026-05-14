@@ -15,12 +15,12 @@
  *      nudges as context fills up.
  *   4. A `/dcp` slash command surface for inspecting/controlling DCP.
  *
- * Config lives in ~/.pi/agent/extensions/pi-dcp/config.json (auto-created on
- * first run) with optional per-project override at <cwd>/.pi/dcp.json.
+ * Config lives in ~/.pi-dcp/config.json (auto-created on first run) with
+ * optional per-project override at <cwd>/.pi/dcp.json.
  *
- * Prompts: defaults regenerated at init under prompts/defaults/; user
- * overrides honoured under prompts/overrides/ when `experimental.customPrompts`
- * is enabled.
+ * Prompts: defaults regenerated at init under ~/.pi-dcp/prompts/defaults/;
+ * user overrides honoured under ~/.pi-dcp/prompts/overrides/ when
+ * `experimental.customPrompts` is enabled.
  */
 import type {
 	ContextEvent,
@@ -87,7 +87,7 @@ export default function piDcp(pi: ExtensionAPI): void {
 	pi.on("context", (event: ContextEvent, ctx: ExtensionContext): ContextEventResult | void => {
 		try {
 			const result = runPipeline(event.messages as any, config, state, logger);
-			notifyPipelineResult(ctx, config, state, result);
+			notifyPipelineResult(ctx, config, state, result, logger);
 			return { messages: result.messages as ContextEvent["messages"] };
 		} catch (err) {
 			logger.error("pipeline crashed — passing messages through unchanged", {

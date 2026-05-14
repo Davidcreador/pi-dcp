@@ -6,14 +6,15 @@
  *   - compress-message     description of the compress tool in message mode
  *   - compress-range       description of the compress tool in range mode
  *   - soft-nudge           system-prompt addendum at the soft-threshold floor
+ *   - strong-nudge         aggressive variant of soft-nudge (compress.nudgeForce="strong")
  *   - hard-nudge           system-prompt addendum past the hard ceiling
- *   - context-system       (currently unused; reserved for future)
+ *   - iteration-nudge      addendum after iterationNudgeThreshold msgs since last user msg
  *
  * On startup we write all defaults to
- *     ~/.pi/agent/extensions/pi-dcp/prompts/defaults/{name}.md
+ *     ~/.pi-dcp/prompts/defaults/{name}.md
  * so the user can see what they're overriding. If `experimental.customPrompts`
  * is enabled in config, we also LOOK FOR overrides at
- *     ~/.pi/agent/extensions/pi-dcp/prompts/overrides/{name}.md
+ *     ~/.pi-dcp/prompts/overrides/{name}.md
  * and use them when present.
  *
  * Overrides are read once at extension init. Restart pi after edits to pick
