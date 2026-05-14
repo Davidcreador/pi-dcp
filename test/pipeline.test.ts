@@ -197,6 +197,57 @@ test("stored compression replaces tool result with placeholder", () => {
 	assert.equal((msgs[1] as ToolResultMessage).content[0].text!.length, 40_000);
 });
 
+// Invariant: per-pass result.tokensSaved must equal the sum of dedup +
+// purgeErrors + compression savings, and state.stats.tokensSaved must equal
+// the running total of those passes. This pins all three sources in one shot.
+test("tokensSaved invariant: result == dedup + purge + compression, state mirrors lifetime", () => {
+	const BIG = "x".repeat(40_000);
+	const msgs: AnyMessage[] = [
+		// Pair 1: errored bash with long args (purge candidate, but needs aging)
+		mkAssistantWithCall("e1", "bash", { cmd: "y".repeat(2000) }),
+		mkToolResult("e1", "bash", "command not found", true),
+		// Pair 2 & 3: two identical reads (dedup candidate)
+		mkAssistantWithCall("d1", "read", { path: "a.txt" }),
+		mkToolResult("d1", "read", "a".repeat(800)),
+		mkAssistantWithCall("d2", "read", { path: "a.txt" }),
+		mkToolResult("d2", "read", "a".repeat(800)),
+		// Pair 4: separate read with stored compression
+		mkAssistantWithCall("c1", "read", { path: "huge.log" }),
+		mkToolResult("c1", "read", BIG),
+	];
+
+	const state = createSessionState();
+	state.turnIndex = 10; // past purgeErrors.turns gate
+	state.erroredAt.set("e1", 0); // mark e1 as old enough to purge
+	state.compressions.set(99, {
+		id: 99,
+		createdAt: 0,
+		toolCallIds: ["c1"],
+		summary: "summary",
+		topic: "big log",
+		tokensSaved: 0,
+		suspended: false,
+	});
+	state.nextCompressionId = 100;
+
+	const r = runPipeline(msgs, lenientConfig(), state, silentLogger);
+
+	assert.ok(r.dedupPruned >= 1, "expected dedup to fire");
+	assert.ok(r.errorInputsPurged >= 1, "expected purge to fire");
+	assert.ok(r.compressionsApplied >= 1, "expected compression to fire");
+	assert.ok(r.tokensSaved > 0, "expected non-zero savings");
+	// state.stats.tokensSaved must equal what we said we saved this pass
+	// (this is a fresh session so the per-pass total == cumulative)
+	assert.equal(
+		state.stats.tokensSaved,
+		r.tokensSaved,
+		"state.stats.tokensSaved must mirror result.tokensSaved across ALL three sources",
+	);
+	assert.equal(state.stats.dedupPruned, r.dedupPruned);
+	assert.equal(state.stats.errorInputsPurged, r.errorInputsPurged);
+	assert.equal(state.stats.compressionsApplied, r.compressionsApplied);
+});
+
 // Regression test for an audit finding: compression token savings were being
 // added to `result.tokensSaved` (so lifetime stats.json was correct) but NOT
 // to `state.stats.tokensSaved`, so the footer chip and /dcp context

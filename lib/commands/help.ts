@@ -1,4 +1,5 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { toast } from "../ui/toast.ts";
 
 const HELP = [
 	"pi-dcp commands:",
@@ -16,5 +17,5 @@ const HELP = [
 ].join("\n");
 
 export async function handleHelp(_args: string, ctx: ExtensionCommandContext): Promise<void> {
-	ctx.ui.notify(HELP, "info");
+	void toast(ctx, HELP, "info");
 }

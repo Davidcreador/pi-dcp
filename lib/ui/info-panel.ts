@@ -18,13 +18,13 @@
  *     e.g. in print mode or RPC mode where there is no live TUI surface.
  */
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
 	Container,
 	matchesKey,
 	Spacer,
 	Text,
+	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 
@@ -79,7 +79,11 @@ export async function showInfoPanel(
 		custom?: (
 			factory: (
 				tui: { requestRender(): void },
-				theme: { fg: (color: string, text: string) => string; bold: (s: string) => string },
+				theme: {
+					fg: (color: string, text: string) => string;
+					bg: (color: string, text: string) => string;
+					bold: (s: string) => string;
+				},
 				keybindings: unknown,
 				done: (result?: unknown) => void,
 			) => Component,
@@ -96,57 +100,60 @@ export async function showInfoPanel(
 
 	await ui.custom(
 		(tui, theme, _keybindings, done) => {
-			// We rebuild content on every invalidate so theme changes redraw
-			// correctly. The Container's own invalidate() only clears child
-			// caches — pre-baked theme strings in Text children would be stale.
-			const container = new Container();
+			// Inner container holds the panel content. We wrap it in a hand-drawn
+			// 4-sided border because pi-tui's DynamicBorder only renders
+			// horizontal rules — overlays do not get a frame for free.
+			//
+			// Rebuild on every invalidate so theme changes redraw correctly. The
+			// Container's own invalidate() only clears child caches — pre-baked
+			// theme strings in Text children would otherwise be stale.
+			const inner = new Container();
 
 			const rebuild = () => {
-				container.clear();
-				container.addChild(
-					new DynamicBorder((s: string) => theme.fg("borderAccent", s)),
+				inner.clear();
+				inner.addChild(
+					new Text(theme.fg("accent", theme.bold(options.title)), 0, 0),
 				);
-				container.addChild(
-					new Text(theme.fg("accent", theme.bold(options.title)), 1, 0),
-				);
-				container.addChild(new Spacer(1));
+				inner.addChild(new Spacer(1));
 
 				const labelWidth = computeLabelWidth(options.sections);
 
 				for (let i = 0; i < options.sections.length; i++) {
 					const section = options.sections[i];
 					if (section.heading) {
-						container.addChild(
-							new Text(theme.fg("accent", section.heading), 1, 0),
-						);
+						inner.addChild(new Text(theme.fg("accent", section.heading), 0, 0));
 					}
 					for (const row of section.rows) {
-						container.addChild(renderRow(row, theme, labelWidth));
+						inner.addChild(renderRow(row, theme, labelWidth));
 					}
-					if (i < options.sections.length - 1) container.addChild(new Spacer(1));
+					if (i < options.sections.length - 1) inner.addChild(new Spacer(1));
 				}
 
-				container.addChild(new Spacer(1));
-				container.addChild(
+				inner.addChild(new Spacer(1));
+				inner.addChild(
 					new Text(
 						theme.fg("dim", options.footer ?? "esc/enter to close"),
-						1,
+						0,
 						0,
 					),
-				);
-				container.addChild(
-					new DynamicBorder((s: string) => theme.fg("borderAccent", s)),
 				);
 			};
 
 			rebuild();
 
 			const close = () => done(undefined);
+			const borderColor = (s: string) => theme.fg("borderAccent", s);
+			// Dark slab via raw 256-color ANSI (color 234 = very dark gray). Theme
+			// bg slots (customMessageBg etc.) are too close to the editor area on
+			// dark themes — a hand-picked dark gray reads as a distinct panel on
+			// every shipped theme. \x1b[49m resets background only.
+			const bgColor = (s: string) => `\x1b[48;5;234m${s}\x1b[49m`;
 
 			return {
-				render: (w: number) => container.render(w),
+				render: (w: number) =>
+					drawBox(inner.render(Math.max(4, w - 4)), w, borderColor, bgColor),
 				invalidate: () => {
-					container.invalidate();
+					inner.invalidate();
 					rebuild();
 				},
 				handleInput: (data: string) => {
@@ -201,6 +208,39 @@ function renderRow(
 		? theme.fg(row.valueColor, row.value)
 		: row.value;
 	return new Text(`${labelStyled}  ${valueStyled}`, 2, 0);
+}
+
+/**
+ * Wrap a list of pre-rendered inner lines in a Unicode 4-sided border.
+ *
+ * The outer `width` is the overlay's total width. Inner content gets
+ * `width - 4` (two side glyphs + one space of padding per side). Each inner
+ * line is padded with spaces to the inner width so the right border aligns
+ * even when the line carries ANSI escapes (we use visibleWidth, not
+ * String.length).
+ */
+function drawBox(
+	innerLines: string[],
+	width: number,
+	color: (s: string) => string,
+	bg: (s: string) => string,
+): string[] {
+	const w = Math.max(4, width);
+	const innerWidth = w - 4; // 2 border glyphs + 2 spaces padding
+	// Apply bg around the WHOLE line (including border glyphs) so the panel
+	// reads as a single contiguous slab. Pi's theme.bg() emits a bg-reset at
+	// the end of the wrapped string, so each call must wrap a complete line.
+	const top = bg(color(`┌${"─".repeat(w - 2)}┐`));
+	const bottom = bg(color(`└${"─".repeat(w - 2)}┘`));
+	const side = color("│");
+	const out: string[] = [top];
+	for (const raw of innerLines) {
+		const line = truncateToWidth(raw, innerWidth);
+		const pad = Math.max(0, innerWidth - visibleWidth(line));
+		out.push(bg(`${side} ${line}${" ".repeat(pad)} ${side}`));
+	}
+	out.push(bottom);
+	return out;
 }
 
 function flattenForToast(options: ShowInfoPanelOptions): string {

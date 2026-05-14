@@ -1,4 +1,5 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { toast } from "../ui/toast.ts";
 import type { SessionState } from "../state.ts";
 
 /**
@@ -16,7 +17,7 @@ export function makeManualCommand(state: SessionState) {
 	return async function handleManual(args: string, ctx: ExtensionCommandContext): Promise<void> {
 		const arg = args.trim().toLowerCase();
 		if (arg === "status") {
-			ctx.ui.notify(
+			void toast(ctx, 
 				`pi-dcp manual mode: ${state.manualMode ? "ON" : "off"} (runtime only \u2014 edit config.json to persist)`,
 				"info",
 			);
@@ -26,10 +27,10 @@ export function makeManualCommand(state: SessionState) {
 		else if (arg === "off") state.manualMode = false;
 		else if (arg === "" || arg === "toggle") state.manualMode = !state.manualMode;
 		else {
-			ctx.ui.notify(`pi-dcp: unknown arg "${arg}" (expected on|off|status|toggle)`, "warning");
+			void toast(ctx, `pi-dcp: unknown arg "${arg}" (expected on|off|status|toggle)`, "warning");
 			return;
 		}
-		ctx.ui.notify(
+		void toast(ctx, 
 			`pi-dcp manual mode: ${state.manualMode ? "ON" : "off"} (runtime only \u2014 edit config.json to persist)`,
 			"info",
 		);

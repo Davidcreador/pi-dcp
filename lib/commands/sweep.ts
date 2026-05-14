@@ -12,6 +12,7 @@
  * tree.
  */
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { toast } from "../ui/toast.ts";
 import { ALWAYS_PROTECTED_TOOLS, type DcpConfig } from "../config.ts";
 import type { Logger } from "../logger.ts";
 import type { CompressionRecord, SessionState } from "../state.ts";
@@ -29,7 +30,7 @@ export function makeSweepCommand(state: SessionState, config: DcpConfig, logger:
 				if (Number.isInteger(n) && n > 0) userLimit = n;
 			}
 			if (userLimit === undefined) {
-				ctx.ui.notify(`pi-dcp sweep: "${arg}" is not a positive integer; ignoring`, "warning");
+				void toast(ctx, `pi-dcp sweep: "${arg}" is not a positive integer; ignoring`, "warning");
 			}
 		}
 
@@ -38,7 +39,7 @@ export function makeSweepCommand(state: SessionState, config: DcpConfig, logger:
 		try {
 			branch = sm.getBranch();
 		} catch (e) {
-			ctx.ui.notify("pi-dcp sweep: could not read session branch", "warning");
+			void toast(ctx, "pi-dcp sweep: could not read session branch", "warning");
 			logger.error("sweep failed to read branch", {
 				error: e instanceof Error ? e.message : String(e),
 			});
@@ -66,7 +67,7 @@ export function makeSweepCommand(state: SessionState, config: DcpConfig, logger:
 		}
 
 		if (ids.length === 0) {
-			ctx.ui.notify("pi-dcp sweep: no eligible tool results found", "info");
+			void toast(ctx, "pi-dcp sweep: no eligible tool results found", "info");
 			return;
 		}
 
@@ -82,7 +83,7 @@ export function makeSweepCommand(state: SessionState, config: DcpConfig, logger:
 		};
 		state.compressions.set(id, rec);
 		logger.info("sweep staged", { id, count: ids.length });
-		ctx.ui.notify(
+		void toast(ctx, 
 			`pi-dcp sweep: staged compression #${id} over ${ids.length} tool result(s). Run "/dcp decompress ${id}" to undo before the next message.`,
 			"info",
 		);

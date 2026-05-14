@@ -22,6 +22,7 @@ import type { DcpConfig } from "./config.ts";
 import type { Logger } from "./logger.ts";
 import type { PipelineResult } from "./pipeline.ts";
 import type { SessionState } from "./state.ts";
+import { toast } from "./ui/toast.ts";
 
 const STATUS_KEY = "dcp";
 
@@ -106,7 +107,7 @@ export function notifyPipelineResult(
 	if (mode === "detailed" && didWork) {
 		const text = buildToastText(result);
 		try {
-			ctx.ui.notify(text, "info");
+			void toast(ctx, text, "info");
 			toastFired = true;
 		} catch (err) {
 			logger?.warn("notify failed", {

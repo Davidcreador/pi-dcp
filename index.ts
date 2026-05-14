@@ -45,6 +45,7 @@ import { makeContextCommand } from "./lib/commands/context.ts";
 import { makeManualCommand } from "./lib/commands/manual.ts";
 import { makeSweepCommand } from "./lib/commands/sweep.ts";
 import { makeDecompressCommand, makeRecompressCommand } from "./lib/commands/decompress.ts";
+import { toast } from "./lib/ui/toast.ts";
 
 interface ContextEventResult {
 	messages?: ContextEvent["messages"];
@@ -156,7 +157,7 @@ export default function piDcp(pi: ExtensionAPI): void {
 					case "recompress":
 						return makeRecompressCommand(state)(subArgs, ctx);
 					default:
-						ctx.ui.notify(`pi-dcp: unknown subcommand "${sub}"`, "warning");
+						void toast(ctx, `pi-dcp: unknown subcommand "${sub}"`, "warning");
 						return handleHelp("", ctx);
 				}
 			} catch (err) {
@@ -164,7 +165,8 @@ export default function piDcp(pi: ExtensionAPI): void {
 					sub,
 					error: err instanceof Error ? err.message : String(err),
 				});
-				ctx.ui.notify(
+				void toast(
+					ctx,
 					`pi-dcp: /dcp ${sub} failed — ${err instanceof Error ? err.message : String(err)}`,
 					"error",
 				);
