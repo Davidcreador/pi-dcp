@@ -85,9 +85,12 @@ export default function piDcp(pi: ExtensionAPI): void {
 	pi.on("session_start", (event: SessionStartEvent, ctx: ExtensionContext) => {
 		try {
 			const sessionId = ctx.sessionManager.getSessionId?.() ?? "";
+			logger.info("session_start fired", { reason: event.reason, sessionId: sessionId || "(empty)" });
 			if (sessionId) {
 				state.sessionId = sessionId;
 				restoreSessionState(sessionId, state, logger);
+			} else {
+				logger.warn("session_start: getSessionId returned empty — persistence disabled for this session");
 			}
 			// Prune stale session files opportunistically (30-day TTL).
 			pruneOldSessionFiles(30, logger);
