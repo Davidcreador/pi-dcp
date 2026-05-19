@@ -57,5 +57,8 @@
       "./skills"
     ],
     "image": "assets/preview.png"
+  },
+  "dependencies": {
+    "@anthropic-ai/tokenizer": "^0.0.4"
   }
 }
