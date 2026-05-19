@@ -26,6 +26,19 @@ import { toast } from "./ui/toast.ts";
 
 const STATUS_KEY = "dcp";
 
+/**
+ * Repaint the footer status chip immediately (e.g. after state restore on
+ * session_start). No-ops silently if ctx.hasUI is false or setStatus throws.
+ */
+export function refreshFooterStatus(ctx: ExtensionContext, state: SessionState): void {
+	if (!ctx.hasUI) return;
+	try {
+		ctx.ui.setStatus(STATUS_KEY, buildFooterText(state));
+	} catch {
+		// best effort
+	}
+}
+
 function formatTokens(n: number): string {
 	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
 	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;

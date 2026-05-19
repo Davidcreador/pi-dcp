@@ -39,7 +39,7 @@ import { runPipeline } from "./lib/pipeline.ts";
 import { createSessionState } from "./lib/state.ts";
 import { bumpLifetime } from "./lib/stats.ts";
 import { makeNudgeHandler } from "./lib/nudges.ts";
-import { notifyPipelineResult } from "./lib/notifications.ts";
+import { notifyPipelineResult, refreshFooterStatus } from "./lib/notifications.ts";
 import { PromptStore } from "./lib/prompts/index.ts";
 import { createCompressMessageTool } from "./lib/tools/compress-message.ts";
 import { createCompressRangeTool } from "./lib/tools/compress-range.ts";
@@ -88,7 +88,8 @@ export default function piDcp(pi: ExtensionAPI): void {
 			logger.info("session_start fired", { reason: event.reason, sessionId: sessionId || "(empty)" });
 			if (sessionId) {
 				state.sessionId = sessionId;
-				restoreSessionState(sessionId, state, logger);
+				const restored = restoreSessionState(sessionId, state, logger);
+				if (restored) refreshFooterStatus(ctx, state);
 			} else {
 				logger.warn("session_start: getSessionId returned empty — persistence disabled for this session");
 			}

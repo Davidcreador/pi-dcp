@@ -46,6 +46,12 @@ interface PersistedState {
 	purgedErrorCallIds: string[];
 	appliedCompressionTargets: string[];
 	erroredAt: Array<[string, number]>;
+	stats?: {
+		dedupPruned: number;
+		errorInputsPurged: number;
+		compressionsApplied: number;
+		tokensSaved: number;
+	};
 }
 
 interface SerializedCompressionRecord {
@@ -109,6 +115,7 @@ export function saveSessionState(
 			purgedErrorCallIds: Array.from(state.purgedErrorCallIds),
 			appliedCompressionTargets: Array.from(state.appliedCompressionTargets),
 			erroredAt: Array.from(state.erroredAt.entries()),
+			stats: { ...state.stats },
 		};
 
 		const filePath = sessionFilePath(sessionId);
@@ -175,6 +182,12 @@ export function restoreSessionState(
 			for (const [id, turn] of data.erroredAt)
 				if (typeof id === "string" && typeof turn === "number")
 					state.erroredAt.set(id, turn);
+		}
+		if (data.stats) {
+			state.stats.dedupPruned = data.stats.dedupPruned ?? 0;
+			state.stats.errorInputsPurged = data.stats.errorInputsPurged ?? 0;
+			state.stats.compressionsApplied = data.stats.compressionsApplied ?? 0;
+			state.stats.tokensSaved = data.stats.tokensSaved ?? 0;
 		}
 
 		logger.info("session state restored", {
