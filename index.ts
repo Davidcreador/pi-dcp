@@ -28,6 +28,10 @@ import type {
 	ExtensionContext,
 	TurnStartEvent,
 	ToolResultEvent,
+	SessionStartEvent,
+	SessionShutdownEvent,
+	SessionCompactEvent,
+	AgentEndEvent,
 } from "@earendil-works/pi-coding-agent";
 import { loadConfig } from "./lib/config.ts";
 import { Logger } from "./lib/logger.ts";
@@ -46,6 +50,12 @@ import { makeManualCommand } from "./lib/commands/manual.ts";
 import { makeSweepCommand } from "./lib/commands/sweep.ts";
 import { makeDecompressCommand, makeRecompressCommand } from "./lib/commands/decompress.ts";
 import { toast } from "./lib/ui/toast.ts";
+import {
+	saveSessionState,
+	restoreSessionState,
+	resetTrackingAfterCompaction,
+	pruneOldSessionFiles,
+} from "./lib/persistence.ts";
 
 interface ContextEventResult {
 	messages?: ContextEvent["messages"];
@@ -69,6 +79,52 @@ export default function piDcp(pi: ExtensionAPI): void {
 	state.manualMode = config.manualMode.enabled;
 
 	bumpLifetime({ sessionsTouched: 1 });
+
+	// Restore state from previous session if this session was already visited.
+	// We don't know the session ID yet at init time — it comes in on session_start.
+	pi.on("session_start", (event: SessionStartEvent, ctx: ExtensionContext) => {
+		try {
+			const sessionId = ctx.sessionManager.getSessionId?.() ?? "";
+			if (sessionId) {
+				state.sessionId = sessionId;
+				restoreSessionState(sessionId, state, logger);
+			}
+			// Prune stale session files opportunistically (30-day TTL).
+			pruneOldSessionFiles(30, logger);
+		} catch (err) {
+			logger.warn("session_start handler failed", {
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
+	});
+
+	// Persist state before pi shuts down or switches sessions.
+	pi.on("session_shutdown", (_event: SessionShutdownEvent, _ctx: ExtensionContext) => {
+		try {
+			if (state.sessionId) saveSessionState(state.sessionId, state, logger);
+		} catch (err) {
+			logger.warn("session_shutdown: failed to save state", {
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
+	});
+
+	// After pi's built-in compaction, old tool-call IDs no longer exist in the
+	// message stream. Clear all ID-based tracking so stale references don't
+	// pollute the pruning strategies. Compressions survive — they were
+	// user-requested and the pipeline will just no-op on missing IDs.
+	pi.on("session_compact", (_event: SessionCompactEvent, _ctx: ExtensionContext) => {
+		try {
+			resetTrackingAfterCompaction(state, logger);
+			// Also reset the cached token count so we don't fire nudges based on
+			// pre-compaction usage numbers.
+			state.lastKnownTokens = null;
+		} catch (err) {
+			logger.warn("session_compact handler failed", {
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
+	});
 	logger.info("pi-dcp initialized", {
 		enabled: config.enabled,
 		mode: config.compress.mode,
@@ -102,6 +158,18 @@ export default function piDcp(pi: ExtensionAPI): void {
 	// 2. Track turn index so purgeErrors can age errored calls.
 	pi.on("turn_start", (event: TurnStartEvent) => {
 		state.turnIndex = event.turnIndex;
+	});
+
+	// 2b. Save state after each agent turn completes. This ensures compressions
+	//     and dedup state survive crashes between session_shutdown events.
+	pi.on("agent_end", (_event: AgentEndEvent, _ctx: ExtensionContext) => {
+		try {
+			if (state.sessionId) saveSessionState(state.sessionId, state, logger);
+		} catch (err) {
+			logger.warn("agent_end: failed to save state", {
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
 	});
 
 	// 3. Record errored tool results the moment we see them so purgeErrors has

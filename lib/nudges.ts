@@ -83,7 +83,13 @@ export function makeNudgeHandler(
 			window,
 		);
 
-		const tokens = usage?.tokens ?? null;
+		// ctx.getContextUsage().tokens is null right after compaction (before the
+		// first LLM response). That's exactly when nudges are most needed.
+		// Cache the last non-null value and use it as a fallback.
+		if (usage?.tokens !== null && usage?.tokens !== undefined) {
+			state.lastKnownTokens = usage.tokens;
+		}
+		const tokens = usage?.tokens ?? state.lastKnownTokens;
 		const isHard = tokens !== null && tokens >= maxLimit;
 		const isSoft = !isHard && tokens !== null && tokens >= minLimit;
 

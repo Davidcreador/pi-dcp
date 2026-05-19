@@ -140,17 +140,15 @@ export function toolCallKey(call: { name: string; arguments: Record<string, unkn
 	return `${call.name}::${canonicalJson(call.arguments)}`;
 }
 
-/** Approximate token count for a string. Pi gives us totals via getContextUsage()
- *  but for per-message savings estimates we use the classic ~4-chars-per-token heuristic. */
-export function approxTokens(text: string): number {
-	return Math.ceil(text.length / 4);
-}
+// Use and re-export the real tokenizer from tokens.ts.
+import { approxTokens as _approxTokens } from "./tokens.ts";
+export { approxTokens } from "./tokens.ts";
 
 /** Approximate token count for a ToolResultMessage's content payload. */
 export function toolResultTokens(m: ToolResultMessage): number {
 	let n = 0;
 	for (const c of m.content) {
-		if ((c as TextContent).type === "text") n += approxTokens((c as TextContent).text);
+		if ((c as TextContent).type === "text") n += _approxTokens((c as TextContent).text);
 		else n += 256; // images: rough placeholder cost
 	}
 	return n;

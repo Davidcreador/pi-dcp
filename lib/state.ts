@@ -27,6 +27,10 @@ export interface SessionStats {
 }
 
 export interface SessionState {
+	/** Resolved from ctx.sessionManager.getSessionId() on session_start. Used for persistence. */
+	sessionId: string;
+	/** Last non-null token count from ctx.getContextUsage(). Used when current usage is null (e.g. right after compaction). */
+	lastKnownTokens: number | null;
 	compressions: Map<number, CompressionRecord>;
 	nextCompressionId: number;
 	stats: SessionStats;
@@ -58,6 +62,8 @@ export interface SessionState {
 
 export function createSessionState(): SessionState {
 	return {
+		sessionId: "",
+		lastKnownTokens: null,
 		compressions: new Map(),
 		nextCompressionId: 1,
 		stats: {
