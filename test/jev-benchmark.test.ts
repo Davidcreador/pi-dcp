@@ -71,7 +71,9 @@ test("fixture comparison measures both potential reduction and conservative rete
 		assert.deepEqual(selected.find(message => message.role === "toolResult" && message.toolCallId === "critical"), messagesOf(critical)[1]);
 		const counts = { original: approxTokens(JSON.stringify(original)), currentDcp: approxTokens(JSON.stringify(baseline)), proposed: approxTokens(JSON.stringify(selected)) };
 		if (scenario === "approved-obsolete") assert.ok(counts.proposed < counts.currentDcp);
-		else assert.ok(counts.proposed > counts.currentDcp);
+		// Unscored duplicates are no longer Jev-protected: deterministic dedup
+		// removes them in both pipelines, so the proposals tie.
+		else assert.equal(counts.proposed, counts.currentDcp);
 		t.diagnostic(JSON.stringify({ schema: "jev-fixture-comparison/v1", scenario, serializedFixtureTokenEstimates: counts,
 			singleRunTransformMs: { currentDcp: dcpMs, proposed: jevMs }, mockedRequests: requests, protectedFixturePreserved: true,
 			realAccuracyCostCacheAndWorkflowLatency: "not measured" }));

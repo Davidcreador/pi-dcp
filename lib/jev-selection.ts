@@ -185,12 +185,12 @@ export class JevSelection {
 		latest: () => SelectionView, infer: Inference = (request, signal) => requestJev(request, readKey(), signal),
 	): Promise<"disabled" | "busy" | "budget" | "no-candidates" | "declined" | "stale" | "scored" | "failed"> {
 		if (!this.options?.enabled) return "disabled";
+		if (this.stats.attempts >= 4) return "budget";
 		if (task !== this.taskBrief) {
 			this.invalidate();
 			this.taskBrief = task;
 		}
 		if (this.busy) return "busy";
-		if (this.stats.attempts >= 4) return "budget";
 		const candidates = this.candidates(view);
 		if (!candidates.length) return "no-candidates";
 		const request = makeRequest(task, candidates.map(candidate => ({ id: candidate.id,
@@ -264,18 +264,16 @@ export class JevSelection {
 			this.stats.protectionBlocked = true;
 			return { hold: true, keep, omit };
 		}
-		for (const message of view.messages) {
-			if (message.role === "toolResult") keep.add(message.toolCallId);
-			if (message.role === "assistant") {
-				for (const content of message.content) if (content.type === "toolCall") keep.add(content.id);
-			}
-		}
 		const recent = protectedByRecency(view.messages, this.turns);
 
+		// Only SCORED candidates are protected from the deterministic strategies:
+		// scored-and-retained results join keep, scored-and-droppable ones go to
+		// omit. Everything unscored stays free for dedup/overlap/decay/purge.
 		for (const [id, { candidate, probability, model }] of this.scores) {
 			if (model === this.stats.model && this.options.dropBelow !== null && probability < this.options.dropBelow && this.current(candidate, view, recent, pins)) {
-				keep.delete(id);
 				omit.set(id, candidate.original.ref.entryId);
+			} else {
+				keep.add(id);
 			}
 		}
 		return { hold: false, keep, omit };

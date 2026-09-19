@@ -60,7 +60,7 @@ test("pins, source changes and input invalidation defeat low scores", async () =
 	writeFileSync(join(view.cwd, "source.ts"), "different source");
 	assert.equal(selector.policy(view).keep.has("old"), true);
 	selector.invalidate();
-	assert.equal(selector.policy(view).keep.has("old"), true);
+	assert.equal(selector.policy(view).omit.has("old"), false);
 });
 
 test("a new explicit brief invalidates previous-task scores even when the new disclosure is declined", async () => {
@@ -68,7 +68,17 @@ test("a new explicit brief invalidates previous-task scores even when the new di
 	await selector.score(view, "First task", async () => true, () => view, lowScore);
 	assert.equal(selector.policy(view).keep.has("old"), false);
 	assert.equal(await selector.score(view, "Different task", async () => false, () => view, lowScore), "declined");
-	assert.equal(selector.policy(view).keep.has("old"), true);
+	assert.equal(selector.policy(view).omit.has("old"), false);
+});
+
+test("unscored results are neither protected nor omitted, leaving deterministic strategies free", async () => {
+	const { selector, view, text } = fixture();
+	await selector.score(view, "Fix parser", async () => true, () => view, lowScore);
+	const extra = resultEntries("extra", text);
+	const scoped = { ...view, entries: [...view.entries, ...extra], messages: [...view.messages, ...messagesOf(extra)] };
+	const policy = selector.policy(scoped);
+	assert.equal(policy.keep.has("extra"), false);
+	assert.equal(policy.omit.has("extra"), false);
 });
 
 test("late responses and changed payload scope stay retained", async () => {

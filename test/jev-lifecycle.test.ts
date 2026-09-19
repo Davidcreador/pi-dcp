@@ -41,7 +41,7 @@ test("shadow judgments retain results and failures never authorize another strat
 	assert.equal(await shadow.score(view, "Task", async () => true, () => view, async () => reply()), "scored");
 	assert.equal(shadow.policy(view).keep.has("old"), true);
 	assert.equal(await selector.score(view, "Task", async () => true, () => view, async () => { throw new Error("fixture timeout"); }), "failed");
-	assert.equal(selector.policy(view).keep.has("old"), true);
+	assert.equal(selector.policy(view).omit.has("old"), false);
 	assert.equal(await selector.score(view, "Task", async () => true, () => view, async () => reply()), "no-candidates");
 });
 
@@ -52,7 +52,7 @@ test("attempt budget survives task resets and does not automatically retry", asy
 	}
 	assert.equal(await selector.score(view, "Another task", async () => { throw new Error("No approval expected"); }, () => view, async () => reply()), "budget");
 	assert.equal(selector.stats.attempts, 4);
-	assert.equal(selector.policy(view).keep.has("old"), true);
+	assert.equal(selector.policy(view).omit.has("old"), true);
 });
 
 test("invalid pins and upstream changes to protected originals retain the entire incoming view", () => {
@@ -71,9 +71,13 @@ test("invalid pins and upstream changes to protected originals retain the entire
 	assert.equal(selector.policy({ ...view, entries: [...view.entries, { ...entries[entries.length - 1], type: "custom", id: "bad", customType: PIN_ENTRY, data: {} }] }).hold, true);
 });
 
-test("final guard returns the untouched incoming view if another strategy changes protected data", () => {
+test("final guard returns the untouched incoming view if another strategy changes protected data", async () => {
 	const { selector, view } = selectionFixture();
+	await selector.score(view, "Task", async () => true, () => view, async () => ({
+		model: "jev-1.13.0", probabilities: new Map([["c0", 0.9]]),
+		usage: { input_tokens: 100, output_tokens: 10 }, elapsedMs: 1 }));
 	const policy = selector.policy(view);
+	assert.equal(policy.keep.has("old"), true);
 	const changed = structuredClone(view.messages);
 	const result = changed.find(message => message.role === "toolResult");
 	assert.ok(result?.role === "toolResult");
