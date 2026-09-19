@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "allowJs": true, "checkJs": true },
+  "include": ["test/protection.test.ts", "test/jev*.test.ts", "test/check-host.mjs", "test/host-integration.mjs"]
+}

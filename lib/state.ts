@@ -60,6 +60,15 @@ export interface SessionState {
 	lastIterationNudgeAt: number;
 }
 
+/** Legacy suspension remains a protection reason even before durable pin metadata exists. */
+export function suspendedTargets(state: SessionState): Set<string> {
+	const ids = new Set<string>();
+	for (const compression of state.compressions.values()) {
+		if (compression.suspended) for (const id of compression.toolCallIds) ids.add(id);
+	}
+	return ids;
+}
+
 export function createSessionState(): SessionState {
 	return {
 		sessionId: "",

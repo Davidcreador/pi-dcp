@@ -4,10 +4,9 @@
  *
  * Critical invariants:
  *
- * 1. Every ToolCall in an assistant message MUST be matched by exactly one
- *    ToolResultMessage immediately after it. When we "prune" a tool we
- *    therefore REPLACE the content of the ToolResultMessage with a short
- *    placeholder, never remove it. Many providers reject orphaned tool calls.
+ * 1. Preserve tool-call/result envelopes and their original ordering. When
+ *    we "prune" a tool we REPLACE its result body with a short placeholder,
+ *    never remove the result. Providers reject orphaned tool calls.
  *
  * 2. The `messages` array we receive contains references to message objects
  *    that the session manager still holds. Mutating them in place corrupts
@@ -15,23 +14,21 @@
  *    structures we plan to write to) before modifying it, and emit a fresh
  *    array via ContextEventResult.
  *
- * Type shapes mirror @earendil-works/pi-ai. We use structural types instead of
- * importing the full AgentMessage union — that keeps the file self-contained
- * and avoids leaking optional fields the pipeline never inspects.
+ * Common roles use structural field subsets compatible with pi-ai messages.
+ * Other SDK roles pass through unchanged; generic callers retain their full types.
  */
+
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 export interface TextContent {
 	type: "text";
 	text: string;
-	[k: string]: unknown;
 }
 export interface ImageContent {
 	type: "image";
-	[k: string]: unknown;
 }
 export interface ThinkingContent {
 	type: "thinking";
-	[k: string]: unknown;
 }
 
 /** Pi-ai's ToolCall uses `arguments`, not `input`. Critical to get right. */
@@ -40,7 +37,6 @@ export interface ToolCall {
 	id: string;
 	name: string;
 	arguments: Record<string, unknown>;
-	[k: string]: unknown;
 }
 
 export type AssistantContent = TextContent | ThinkingContent | ToolCall;
@@ -51,14 +47,12 @@ export interface UserMessage {
 	role: "user";
 	content: string | UserContent[];
 	timestamp: number;
-	[k: string]: unknown;
 }
 
 export interface AssistantMessage {
 	role: "assistant";
 	content: AssistantContent[];
 	timestamp: number;
-	[k: string]: unknown;
 }
 
 export interface ToolResultMessage {
@@ -69,10 +63,10 @@ export interface ToolResultMessage {
 	details?: unknown;
 	isError: boolean;
 	timestamp: number;
-	[k: string]: unknown;
 }
 
-export type AnyMessage = UserMessage | AssistantMessage | ToolResultMessage;
+export type AnyMessage = UserMessage | AssistantMessage | ToolResultMessage
+	| Exclude<AgentMessage, { role: "user" | "assistant" | "toolResult" }>;
 
 export function isToolResult(m: AnyMessage): m is ToolResultMessage {
 	return (m as { role?: string }).role === "toolResult";

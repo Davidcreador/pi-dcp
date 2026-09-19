@@ -32,12 +32,12 @@ import {
 } from "./messages.ts";
 import { applyDeduplication } from "./strategies/deduplication.ts";
 import { applyPurgeErrors } from "./strategies/purge-errors.ts";
-import type { CompressionRecord, SessionState } from "./state.ts";
+import { suspendedTargets, type CompressionRecord, type SessionState } from "./state.ts";
 import { bumpLifetime } from "./stats.ts";
 
-export interface PipelineResult {
+export interface PipelineResult<T extends AnyMessage = AnyMessage> {
 	/** New messages array to hand back to pi. Same shape as input, mutation-safe. */
-	messages: AnyMessage[];
+	messages: T[];
 	dedupPruned: number;
 	errorInputsPurged: number;
 	compressionsApplied: number;
@@ -84,12 +84,13 @@ function compressionsByToolCallId(state: SessionState): Map<string, CompressionR
 	return out;
 }
 
-export function runPipeline(
-	originalMessages: AnyMessage[],
+export function runPipeline<T extends AnyMessage>(
+	originalMessages: T[],
 	config: DcpConfig,
 	state: SessionState,
-	logger: Logger,
-): PipelineResult {
+	logger: Pick<Logger, "info">,
+	protectedIds: ReadonlySet<string> = new Set(),
+): PipelineResult<T> {
 	// Manual mode can optionally disable auto strategies (dedup + purgeErrors).
 	// Compressions are user-triggered (sweep or LLM-via-compress), so we always
 	// apply them regardless of manual mode.
@@ -103,19 +104,21 @@ export function runPipeline(
 	const protectedByTurn = config.turnProtection.enabled
 		? protectedByRecency(originalMessages, config.turnProtection.turns)
 		: new Set<string>();
+	for (const id of protectedIds) protectedByTurn.add(id);
+	for (const id of suspendedTargets(state)) protectedByTurn.add(id);
 
 	const summaries = compressionsByToolCallId(state);
 	const compressionTargets = new Set(summaries.keys());
 
 	// Build a fresh working array. Each entry is either the original message
 	// (when nothing in this pipeline will touch it) or a clone we can mutate.
-	const messages: AnyMessage[] = new Array(originalMessages.length);
+	const messages: T[] = new Array(originalMessages.length);
 	for (let i = 0; i < originalMessages.length; i++) {
 		const m = originalMessages[i];
 		messages[i] = needsClone(m, config, state, compressionTargets) ? cloneForMutation(m) : m;
 	}
 
-	const result: PipelineResult = {
+	const result: PipelineResult<T> = {
 		messages,
 		dedupPruned: 0,
 		errorInputsPurged: 0,

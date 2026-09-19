@@ -1,6 +1,12 @@
 {
   "enabled": true,
   "debug": false,
+  "jev": {
+    "enabled": false,
+    "project": "",
+    "files": [],
+    "dropBelow": null
+  },
   "pruneNotification": "minimal",
   "experimental": {
     "customPrompts": false

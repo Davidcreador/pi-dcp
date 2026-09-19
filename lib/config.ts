@@ -14,7 +14,16 @@ import * as path from "node:path";
 
 export type Permission = "allow" | "ask" | "deny";
 
+export interface JevConfig {
+	enabled: boolean;
+	project: string;
+	files: string[];
+	/** null is shadow mode; a non-null cutoff requires owner evaluation. */
+	dropBelow: number | null;
+}
+
 export interface DcpConfig {
+	jev: JevConfig;
 	enabled: boolean;
 	debug: boolean;
 	/** "off" | "minimal" | "detailed" — controls /dcp context-style notifications. */
@@ -131,6 +140,7 @@ export const ALWAYS_PROTECTED_TOOLS = new Set([
 export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	enabled: true,
 	debug: false,
+	jev: { enabled: false, project: "", files: [], dropBelow: null },
 	pruneNotification: "minimal",
 	experimental: {
 		customPrompts: false,
@@ -276,7 +286,9 @@ export function loadConfig(
 	const globalOverride = safeReadJson(GLOBAL_CONFIG_PATH, onError);
 	const projectPath = path.join(cwd, ".pi", "dcp.json");
 	const projectOverride = safeReadJson(projectPath, onError);
-	return deepMerge(deepMerge(DEFAULT_CONFIG, globalOverride), projectOverride);
+	const ownerConfig = deepMerge(DEFAULT_CONFIG, globalOverride);
+	// A repository cannot enable disclosure, expand the owner's allowlist, or change its cutoff.
+	return { ...deepMerge(ownerConfig, projectOverride), jev: ownerConfig.jev };
 }
 
 /**
