@@ -45,6 +45,7 @@ interface PersistedState {
 	dedupedCallIds: string[];
 	overlapPrunedCallIds?: string[];
 	supersededCallIds?: string[];
+	decayedCallIds?: string[];
 	purgedErrorCallIds: string[];
 	appliedCompressionTargets: string[];
 	erroredAt: Array<[string, number]>;
@@ -53,6 +54,7 @@ interface PersistedState {
 		dedupPruned: number;
 		overlapPruned?: number;
 		superseded?: number;
+		decayed?: number;
 		errorInputsPurged: number;
 		compressionsApplied: number;
 		tokensSaved: number;
@@ -119,6 +121,7 @@ export function saveSessionState(
 			dedupedCallIds: Array.from(state.dedupedCallIds),
 			overlapPrunedCallIds: Array.from(state.overlapPrunedCallIds),
 			supersededCallIds: Array.from(state.supersededCallIds),
+			decayedCallIds: Array.from(state.decayedCallIds),
 			purgedErrorCallIds: Array.from(state.purgedErrorCallIds),
 			appliedCompressionTargets: Array.from(state.appliedCompressionTargets),
 			erroredAt: Array.from(state.erroredAt.entries()),
@@ -186,6 +189,10 @@ export function restoreSessionState(
 			for (const id of data.supersededCallIds)
 				if (typeof id === "string") state.supersededCallIds.add(id);
 		}
+		if (Array.isArray(data.decayedCallIds)) {
+			for (const id of data.decayedCallIds)
+				if (typeof id === "string") state.decayedCallIds.add(id);
+		}
 		if (Array.isArray(data.purgedErrorCallIds)) {
 			for (const id of data.purgedErrorCallIds)
 				if (typeof id === "string") state.purgedErrorCallIds.add(id);
@@ -209,6 +216,7 @@ export function restoreSessionState(
 			state.stats.dedupPruned = data.stats.dedupPruned ?? 0;
 			state.stats.overlapPruned = data.stats.overlapPruned ?? 0;
 			state.stats.superseded = data.stats.superseded ?? 0;
+			state.stats.decayed = data.stats.decayed ?? 0;
 			state.stats.errorInputsPurged = data.stats.errorInputsPurged ?? 0;
 			state.stats.compressionsApplied = data.stats.compressionsApplied ?? 0;
 			state.stats.tokensSaved = data.stats.tokensSaved ?? 0;
@@ -240,6 +248,7 @@ export function resetTrackingAfterCompaction(state: SessionState, logger: Logger
 	state.dedupedCallIds.clear();
 	state.overlapPrunedCallIds.clear();
 	state.supersededCallIds.clear();
+	state.decayedCallIds.clear();
 	state.purgedErrorCallIds.clear();
 	state.appliedCompressionTargets.clear();
 	state.erroredAt.clear();

@@ -66,6 +66,11 @@ export async function handleStats(
 					},
 					{
 						kind: "kv",
+						label: "old outputs excerpted",
+						value: s.decayed.toLocaleString(),
+					},
+					{
+						kind: "kv",
 						label: "errored tool inputs purged",
 						value: s.errorInputsPurged.toLocaleString(),
 					},

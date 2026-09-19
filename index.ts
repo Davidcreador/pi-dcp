@@ -168,6 +168,7 @@ export default function piDcp(pi: ExtensionAPI): void {
 				compressionsApplied: result.compressionsApplied,
 				overlapPruned: result.overlapPruned,
 				superseded: result.superseded,
+				decayed: result.decayed,
 			});
 			return { messages };
 		} catch (err) {

@@ -33,6 +33,7 @@ import {
 import { applyDeduplication } from "./strategies/deduplication.ts";
 import { applyOverlapDedup } from "./strategies/overlap-dedup.ts";
 import { applySupersession } from "./strategies/supersession.ts";
+import { applySizeAgeDecay } from "./strategies/size-age-decay.ts";
 import { applyPurgeErrors } from "./strategies/purge-errors.ts";
 import { suspendedTargets, type CompressionRecord, type SessionState } from "./state.ts";
 import { bumpLifetime } from "./stats.ts";
@@ -43,6 +44,7 @@ export interface PipelineResult<T extends AnyMessage = AnyMessage> {
 	dedupPruned: number;
 	overlapPruned: number;
 	superseded: number;
+	decayed: number;
 	errorInputsPurged: number;
 	compressionsApplied: number;
 	tokensSaved: number;
@@ -127,6 +129,7 @@ export function runPipeline<T extends AnyMessage>(
 		dedupPruned: 0,
 		overlapPruned: 0,
 		superseded: 0,
+		decayed: 0,
 		errorInputsPurged: 0,
 		compressionsApplied: 0,
 		tokensSaved: 0,
@@ -177,18 +180,24 @@ export function runPipeline<T extends AnyMessage>(
 		result.superseded = superseded.supersededCount;
 		result.tokensSaved += superseded.tokensSaved;
 
-		// 5. Purge errored tool inputs.
+		// 5. Size×age decay (old large outputs become head+tail excerpts).
+		const decay = applySizeAgeDecay(messages, config, state, protectedByTurn);
+		result.decayed = decay.decayedCount;
+		result.tokensSaved += decay.tokensSaved;
+
+		// 6. Purge errored tool inputs.
 		const purged = applyPurgeErrors(messages, config, state, protectedByTurn);
 		result.errorInputsPurged = purged.purgedCount;
 		result.tokensSaved += purged.tokensSaved;
 	}
 
-	if (result.dedupPruned || result.overlapPruned || result.superseded || result.errorInputsPurged || result.compressionsApplied) {
+	if (result.dedupPruned || result.overlapPruned || result.superseded || result.decayed || result.errorInputsPurged || result.compressionsApplied) {
 		state.stats.compressionsApplied += result.compressionsApplied;
 		logger.info("pipeline applied", {
 			dedupPruned: result.dedupPruned,
 			overlapPruned: result.overlapPruned,
 			superseded: result.superseded,
+			decayed: result.decayed,
 			errorInputsPurged: result.errorInputsPurged,
 			compressionsApplied: result.compressionsApplied,
 			tokensSaved: result.tokensSaved,
@@ -197,6 +206,7 @@ export function runPipeline<T extends AnyMessage>(
 			dedupPruned: result.dedupPruned,
 			overlapPruned: result.overlapPruned,
 			superseded: result.superseded,
+			decayed: result.decayed,
 			errorInputsPurged: result.errorInputsPurged,
 			compressionsApplied: result.compressionsApplied,
 			tokensSaved: result.tokensSaved,

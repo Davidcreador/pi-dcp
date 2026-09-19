@@ -119,6 +119,16 @@ export interface DcpConfig {
 			/** Tools whose reads must never be placeholdered as stale. */
 			protectedTools: string[];
 		};
+		sizeAgeDecay: {
+			enabled: boolean;
+			/** Results smaller than this many tokens are never excerpted. */
+			minTokens: number;
+			/** Assistant messages that must follow a result before it is old enough to excerpt. */
+			minAgeSteps: number;
+			headLines: number;
+			tailLines: number;
+			protectedTools: string[];
+		};
 		purgeErrors: {
 			enabled: boolean;
 			/** Number of turns before errored tool call inputs are pruned. */
@@ -211,6 +221,14 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 		},
 		supersession: {
 			enabled: true,
+			protectedTools: [],
+		},
+		sizeAgeDecay: {
+			enabled: true,
+			minTokens: 1500,
+			minAgeSteps: 12,
+			headLines: 30,
+			tailLines: 15,
 			protectedTools: [],
 		},
 		purgeErrors: {

@@ -53,6 +53,9 @@ function mkToolResult(id: string, name: string, text: string, isError = false): 
 		timestamp: 0,
 	};
 }
+function mkAssistantNote(text: string): AssistantMessage {
+	return { role: "assistant", content: [{ type: "text", text }], timestamp: 0 };
+}
 
 test("canonicalJson sorts nested keys", () => {
 	const a = { x: { b: 2, a: 1 }, y: [1, 2] };
@@ -198,11 +201,14 @@ test("stored compression replaces tool result with placeholder", () => {
 });
 
 // Invariant: per-pass result.tokensSaved must equal the sum of dedup +
-// overlapDedup + purgeErrors + compression savings, and state.stats.tokensSaved
+// overlapDedup + supersession + sizeAgeDecay + purgeErrors + compression savings, and state.stats.tokensSaved
 // must equal the running total of those passes. This pins all sources in one shot.
 test("tokensSaved invariant: result == dedup + overlap + purge + compression, state mirrors lifetime", () => {
 	const BIG = "x".repeat(40_000);
 	const msgs: AnyMessage[] = [
+		// Pair 0: old large output (size×age decay candidate; 12 assistants follow)
+		mkAssistantWithCall("g1", "bash", { command: "seq 400" }),
+		mkToolResult("g1", "bash", Array.from({ length: 400 }, (_, i) => `const v_${i} = "padding ${i}";`).join("\n")),
 		// Pair 1: errored bash with long args (purge candidate, but needs aging)
 		mkAssistantWithCall("e1", "bash", { cmd: "y".repeat(2000) }),
 		mkToolResult("e1", "bash", "command not found", true),
@@ -224,6 +230,9 @@ test("tokensSaved invariant: result == dedup + overlap + purge + compression, st
 		mkToolResult("s1", "read", "stale".repeat(100)),
 		mkAssistantWithCall("w1", "edit", { path: "/abs/stale.ts", oldText: "a", newText: "b" }),
 		mkToolResult("w1", "edit", "applied"),
+		// Extra assistant steps push g1 past the sizeAgeDecay age floor.
+		mkAssistantNote("step a"), mkAssistantNote("step b"), mkAssistantNote("step c"),
+		mkAssistantNote("step d"), mkAssistantNote("step e"), mkAssistantNote("step f"),
 	];
 
 	const state = createSessionState();
@@ -245,6 +254,7 @@ test("tokensSaved invariant: result == dedup + overlap + purge + compression, st
 	assert.ok(r.dedupPruned >= 1, "expected dedup to fire");
 	assert.ok(r.overlapPruned >= 1, "expected overlap dedup to fire");
 	assert.ok(r.superseded >= 1, "expected supersession to fire");
+	assert.ok(r.decayed >= 1, "expected size×age decay to fire");
 	assert.ok(r.errorInputsPurged >= 1, "expected purge to fire");
 	assert.ok(r.compressionsApplied >= 1, "expected compression to fire");
 	assert.ok(r.tokensSaved > 0, "expected non-zero savings");
@@ -253,11 +263,12 @@ test("tokensSaved invariant: result == dedup + overlap + purge + compression, st
 	assert.equal(
 		state.stats.tokensSaved,
 		r.tokensSaved,
-		"state.stats.tokensSaved must mirror result.tokensSaved across ALL five sources",
+		"state.stats.tokensSaved must mirror result.tokensSaved across ALL six sources",
 	);
 	assert.equal(state.stats.dedupPruned, r.dedupPruned);
 	assert.equal(state.stats.overlapPruned, r.overlapPruned);
 	assert.equal(state.stats.superseded, r.superseded);
+	assert.equal(state.stats.decayed, r.decayed);
 	assert.equal(state.stats.errorInputsPurged, r.errorInputsPurged);
 	assert.equal(state.stats.compressionsApplied, r.compressionsApplied);
 });

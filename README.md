@@ -201,6 +201,14 @@ The shipped defaults are tuned for real-world long sessions — see `config.exam
       "enabled": true,
       "protectedTools": []
     },
+    "sizeAgeDecay": {
+      "enabled": true,
+      "minTokens": 1500,
+      "minAgeSteps": 12,
+      "headLines": 30,
+      "tailLines": 15,
+      "protectedTools": []
+    },
     "purgeErrors": {
       "enabled": true,
       "turns": 2,

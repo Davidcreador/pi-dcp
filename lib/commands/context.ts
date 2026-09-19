@@ -76,6 +76,11 @@ export function makeContextCommand(state: SessionState) {
 					},
 					{
 						kind: "kv",
+						label: "old outputs excerpted",
+						value: state.stats.decayed.toLocaleString(),
+					},
+					{
+						kind: "kv",
 						label: "errored tool inputs purged",
 						value: state.stats.errorInputsPurged.toLocaleString(),
 					},

@@ -138,6 +138,16 @@ export function toolCallKey(call: { name: string; arguments: Record<string, unkn
 import { approxTokens as _approxTokens } from "./tokens.ts";
 export { approxTokens } from "./tokens.ts";
 
+/** Character size of a ToolResultMessage's content payload (+1024 per image, mirroring the 256-token placeholder). */
+export function toolResultChars(m: ToolResultMessage): number {
+	let n = 0;
+	for (const c of m.content) {
+		if ((c as TextContent).type === "text") n += (c as TextContent).text.length;
+		else n += 1024;
+	}
+	return n;
+}
+
 /** Approximate token count for a ToolResultMessage's content payload. */
 export function toolResultTokens(m: ToolResultMessage): number {
 	let n = 0;
