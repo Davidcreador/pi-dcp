@@ -21,6 +21,7 @@ export interface CompressionRecord {
 
 export interface SessionStats {
 	dedupPruned: number;
+	overlapPruned: number;
 	errorInputsPurged: number;
 	compressionsApplied: number;
 	tokensSaved: number;
@@ -44,6 +45,8 @@ export interface SessionState {
 	erroredAt: Map<string, number>;
 	/** Tool-call IDs we have already deduplicated this session (idempotency). */
 	dedupedCallIds: Set<string>;
+	/** Tool-call IDs already superseded by a newer covering read (idempotency). */
+	overlapPrunedCallIds: Set<string>;
 	/** Real per-call token totals measured on the outgoing message list. */
 	callTelemetry: { calls: number; tokensBefore: number; tokensAfter: number };
 	/** Tool-call IDs whose error inputs have been purged (idempotency). */
@@ -79,6 +82,7 @@ export function createSessionState(): SessionState {
 		nextCompressionId: 1,
 		stats: {
 			dedupPruned: 0,
+			overlapPruned: 0,
 			errorInputsPurged: 0,
 			compressionsApplied: 0,
 			tokensSaved: 0,
@@ -87,6 +91,7 @@ export function createSessionState(): SessionState {
 		turnIndex: 0,
 		erroredAt: new Map(),
 		dedupedCallIds: new Set(),
+		overlapPrunedCallIds: new Set(),
 		callTelemetry: { calls: 0, tokensBefore: 0, tokensAfter: 0 },
 		purgedErrorCallIds: new Set(),
 		appliedCompressionTargets: new Set(),

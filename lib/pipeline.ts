@@ -31,6 +31,7 @@ import {
 	protectedByRecency,
 } from "./messages.ts";
 import { applyDeduplication } from "./strategies/deduplication.ts";
+import { applyOverlapDedup } from "./strategies/overlap-dedup.ts";
 import { applyPurgeErrors } from "./strategies/purge-errors.ts";
 import { suspendedTargets, type CompressionRecord, type SessionState } from "./state.ts";
 import { bumpLifetime } from "./stats.ts";
@@ -39,6 +40,7 @@ export interface PipelineResult<T extends AnyMessage = AnyMessage> {
 	/** New messages array to hand back to pi. Same shape as input, mutation-safe. */
 	messages: T[];
 	dedupPruned: number;
+	overlapPruned: number;
 	errorInputsPurged: number;
 	compressionsApplied: number;
 	tokensSaved: number;
@@ -121,6 +123,7 @@ export function runPipeline<T extends AnyMessage>(
 	const result: PipelineResult<T> = {
 		messages,
 		dedupPruned: 0,
+		overlapPruned: 0,
 		errorInputsPurged: 0,
 		compressionsApplied: 0,
 		tokensSaved: 0,
@@ -161,22 +164,29 @@ export function runPipeline<T extends AnyMessage>(
 		result.dedupPruned = dedup.prunedCount;
 		result.tokensSaved += dedup.tokensSaved;
 
-		// 3. Purge errored tool inputs.
+		// 3. Overlap dedup (reads fully covered by a newer read of the same file).
+		const overlap = applyOverlapDedup(messages, config, state, protectedByTurn);
+		result.overlapPruned = overlap.prunedCount;
+		result.tokensSaved += overlap.tokensSaved;
+
+		// 4. Purge errored tool inputs.
 		const purged = applyPurgeErrors(messages, config, state, protectedByTurn);
 		result.errorInputsPurged = purged.purgedCount;
 		result.tokensSaved += purged.tokensSaved;
 	}
 
-	if (result.dedupPruned || result.errorInputsPurged || result.compressionsApplied) {
+	if (result.dedupPruned || result.overlapPruned || result.errorInputsPurged || result.compressionsApplied) {
 		state.stats.compressionsApplied += result.compressionsApplied;
 		logger.info("pipeline applied", {
 			dedupPruned: result.dedupPruned,
+			overlapPruned: result.overlapPruned,
 			errorInputsPurged: result.errorInputsPurged,
 			compressionsApplied: result.compressionsApplied,
 			tokensSaved: result.tokensSaved,
 		});
 		bumpLifetime({
 			dedupPruned: result.dedupPruned,
+			overlapPruned: result.overlapPruned,
 			errorInputsPurged: result.errorInputsPurged,
 			compressionsApplied: result.compressionsApplied,
 			tokensSaved: result.tokensSaved,

@@ -193,6 +193,10 @@ The shipped defaults are tuned for real-world long sessions — see `config.exam
       "enabled": true,
       "protectedTools": []
     },
+    "overlapDedup": {
+      "enabled": true,
+      "protectedTools": []
+    },
     "purgeErrors": {
       "enabled": true,
       "turns": 2,

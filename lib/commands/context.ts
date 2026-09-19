@@ -66,6 +66,11 @@ export function makeContextCommand(state: SessionState) {
 					},
 					{
 						kind: "kv",
+						label: "superseded reads pruned",
+						value: state.stats.overlapPruned.toLocaleString(),
+					},
+					{
+						kind: "kv",
 						label: "errored tool inputs purged",
 						value: state.stats.errorInputsPurged.toLocaleString(),
 					},

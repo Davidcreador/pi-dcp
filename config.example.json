@@ -59,6 +59,10 @@
       "enabled": true,
       "protectedTools": []
     },
+    "overlapDedup": {
+      "enabled": true,
+      "protectedTools": []
+    },
     "purgeErrors": {
       "enabled": true,
       "turns": 2,

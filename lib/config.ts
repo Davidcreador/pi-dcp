@@ -109,6 +109,11 @@ export interface DcpConfig {
 			/** Tools that must never be deduplicated (e.g. write, edit). */
 			protectedTools: string[];
 		};
+		overlapDedup: {
+			enabled: boolean;
+			/** Tools that must never be treated as reads (never placeholdered by range containment). */
+			protectedTools: string[];
+		};
 		purgeErrors: {
 			enabled: boolean;
 			/** Number of turns before errored tool call inputs are pruned. */
@@ -192,6 +197,10 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	},
 	strategies: {
 		deduplication: {
+			enabled: true,
+			protectedTools: [],
+		},
+		overlapDedup: {
 			enabled: true,
 			protectedTools: [],
 		},

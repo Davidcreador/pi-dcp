@@ -56,6 +56,11 @@ export async function handleStats(
 					},
 					{
 						kind: "kv",
+						label: "superseded reads pruned",
+						value: s.overlapPruned.toLocaleString(),
+					},
+					{
+						kind: "kv",
 						label: "errored tool inputs purged",
 						value: s.errorInputsPurged.toLocaleString(),
 					},

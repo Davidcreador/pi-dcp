@@ -43,12 +43,14 @@ interface PersistedState {
 	turnIndex: number;
 	compressions: Array<[number, SerializedCompressionRecord]>;
 	dedupedCallIds: string[];
+	overlapPrunedCallIds?: string[];
 	purgedErrorCallIds: string[];
 	appliedCompressionTargets: string[];
 	erroredAt: Array<[string, number]>;
 	callTelemetry?: { calls: number; tokensBefore: number; tokensAfter: number };
 	stats?: {
 		dedupPruned: number;
+		overlapPruned?: number;
 		errorInputsPurged: number;
 		compressionsApplied: number;
 		tokensSaved: number;
@@ -113,6 +115,7 @@ export function saveSessionState(
 				serializeRecord(v),
 			]),
 			dedupedCallIds: Array.from(state.dedupedCallIds),
+			overlapPrunedCallIds: Array.from(state.overlapPrunedCallIds),
 			purgedErrorCallIds: Array.from(state.purgedErrorCallIds),
 			appliedCompressionTargets: Array.from(state.appliedCompressionTargets),
 			erroredAt: Array.from(state.erroredAt.entries()),
@@ -172,6 +175,10 @@ export function restoreSessionState(
 			for (const id of data.dedupedCallIds)
 				if (typeof id === "string") state.dedupedCallIds.add(id);
 		}
+		if (Array.isArray(data.overlapPrunedCallIds)) {
+			for (const id of data.overlapPrunedCallIds)
+				if (typeof id === "string") state.overlapPrunedCallIds.add(id);
+		}
 		if (Array.isArray(data.purgedErrorCallIds)) {
 			for (const id of data.purgedErrorCallIds)
 				if (typeof id === "string") state.purgedErrorCallIds.add(id);
@@ -193,6 +200,7 @@ export function restoreSessionState(
 		}
 		if (data.stats) {
 			state.stats.dedupPruned = data.stats.dedupPruned ?? 0;
+			state.stats.overlapPruned = data.stats.overlapPruned ?? 0;
 			state.stats.errorInputsPurged = data.stats.errorInputsPurged ?? 0;
 			state.stats.compressionsApplied = data.stats.compressionsApplied ?? 0;
 			state.stats.tokensSaved = data.stats.tokensSaved ?? 0;
@@ -222,6 +230,7 @@ export function restoreSessionState(
 export function resetTrackingAfterCompaction(state: SessionState, logger: Logger): void {
 	const compressBefore = state.compressions.size;
 	state.dedupedCallIds.clear();
+	state.overlapPrunedCallIds.clear();
 	state.purgedErrorCallIds.clear();
 	state.appliedCompressionTargets.clear();
 	state.erroredAt.clear();
