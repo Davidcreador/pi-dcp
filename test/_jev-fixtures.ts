@@ -34,7 +34,7 @@ export function selectionFixture() {
 		timestamp: "2026-01-01T00:00:00Z", message: { role: "user", timestamp: i + 1, content: "fixture turn" } });
 	const view: SelectionView = { sessionId: "session", cwd, entries, messages: messagesOf(entries) };
 	const config = lenientConfig();
-	config.jev = { enabled: true, project: cwd, files: ["source.ts"], dropBelow: 0.05 };
+	config.jev = { enabled: true, project: cwd, files: ["source.ts"], dropBelow: 0.05, auto: false, task: "" };
 	const selector = new JevSelection(config);
 	selector.observe({ toolName: "read", toolCallId: "old", input: { path: "source.ts" }, content: [{ type: "text", text }], isError: false }, cwd, true);
 	return { selector, view, config, text };

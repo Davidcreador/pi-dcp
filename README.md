@@ -153,7 +153,7 @@ The shipped defaults are tuned for real-world long sessions — see `config.exam
 {
   "enabled": true,
   "debug": false,
-  "jev": { "enabled": false, "project": "", "files": [], "dropBelow": null },
+  "jev": { "enabled": false, "project": "", "files": [], "dropBelow": null, "auto": false, "task": "" },
   "pruneNotification": "minimal",
 
   "experimental": {
@@ -251,7 +251,9 @@ For a separately approved trial, configure an exact canonical project and relati
     "enabled": false,
     "project": "/absolute/canonical/project",
     "files": ["src/parser.ts"],
-    "dropBelow": null
+    "dropBelow": null,
+    "auto": false,
+    "task": ""
   }
 }
 ```

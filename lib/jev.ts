@@ -36,9 +36,10 @@ async function confirmOwner(ctx: JevCommandContext, title: string, message: stri
 	}
 }
 
-export function createJevController(pi: JevApi, config: DcpConfig, state?: SessionState) {
+export function createJevController(pi: JevApi, config: DcpConfig, state?: SessionState, autoDelayMs = 10_000) {
 	let selection = new JevSelection(config);
 	let navigation = 0;
+	let autoTimer: ReturnType<typeof setTimeout> | undefined;
 	const view = (ctx: JevContext, messages?: AgentMessage[]): SelectionView => {
 		const entries = ctx.sessionManager.getBranch();
 		return { sessionId: ctx.sessionManager.getSessionId(), cwd: ctx.cwd, entries,
@@ -70,7 +71,17 @@ export function createJevController(pi: JevApi, config: DcpConfig, state?: Sessi
 		if (!reasons) throw new Error("Invalid branch protection metadata; nothing released");
 		return reasons;
 	};
-	const leaveBranch = () => { navigation++; selection.invalidate(true); };
+	const scheduleAuto = (ctx: JevContext) => {
+		clearTimeout(autoTimer);
+		autoTimer = setTimeout(() => {
+			autoTimer = undefined;
+			const task = selection.options?.task;
+			if (!task) return;
+			void selection.score(view(ctx), task, async () => true, () => view(ctx));
+		}, autoDelayMs);
+		autoTimer.unref?.();
+	};
+	const leaveBranch = () => { navigation++; clearTimeout(autoTimer); selection.invalidate(true); };
 	pi.on("session_start", () => { leaveBranch(); selection = new JevSelection(config); });
 	pi.on("session_shutdown", leaveBranch);
 	pi.on("session_before_switch", leaveBranch);
@@ -79,13 +90,14 @@ export function createJevController(pi: JevApi, config: DcpConfig, state?: Sessi
 	pi.on("session_compact", () => selection.invalidate());
 	pi.on("session_before_tree", leaveBranch);
 	pi.on("session_tree", leaveBranch);
-	pi.on("input", () => { selection.invalidate(); return { action: "continue" }; });
+	pi.on("input", () => { clearTimeout(autoTimer); selection.invalidate(); return { action: "continue" }; });
 	pi.on("tool_result", (event, ctx) => {
 		if (!selection.options?.enabled) return;
 		if (event.toolName === "write" || event.toolName === "edit") selection.invalidate();
 		if (event.toolName !== "read") return;
 		const tool = pi.getAllTools().find(tool => tool.name === "read");
 		selection.observe(event, ctx.cwd, tool?.sourceInfo.source === "builtin" && tool.sourceInfo.path === "<builtin:read>");
+		if (selection.options?.auto) scheduleAuto(ctx);
 	});
 
 	return {

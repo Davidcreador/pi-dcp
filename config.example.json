@@ -5,7 +5,9 @@
     "enabled": false,
     "project": "",
     "files": [],
-    "dropBelow": null
+    "dropBelow": null,
+    "auto": false,
+    "task": ""
   },
   "pruneNotification": "minimal",
   "experimental": {

@@ -8,7 +8,7 @@ import { resultEntries, selectionFixture } from "./_jev-fixtures.ts";
 import { PIN_ENTRY, RECALL_MESSAGE, replayPins, replayPinReasons } from "../lib/protection.ts";
 import { createSessionState, type SessionState } from "../lib/state.ts";
 
-function host(config = lenientConfig(), state?: SessionState) {
+function host(config = lenientConfig(), state?: SessionState, autoDelayMs?: number) {
 	const entries = resultEntries("old", "persisted original; not the compaction summary");
 	const sent: Array<Parameters<JevApi["sendMessage"]>> = [];
 	const handlers = new Map<string, unknown>();
@@ -43,8 +43,8 @@ function host(config = lenientConfig(), state?: SessionState) {
 		model: { id: "fixture", name: "fixture", provider: "openai", api: "openai-responses", baseUrl: "https://invalid.test", reasoning: false,
 			input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100000, maxTokens: 4096 },
 	};
-	const controller = createJevController(api, config, state);
-	return { controller, ctx, entries, sent, handlers, notices, controls };
+	const controller = createJevController(api, config, state, autoDelayMs);
+	return { controller, ctx, entries, sent, handlers, notices, controls, api };
 }
 
 function scoringHost() {
@@ -57,6 +57,47 @@ function scoringHost() {
 }
 
 const scored = async () => ({ model: "jev-1.13.0", probabilities: new Map([["c0", 0.01]]), usage: { input_tokens: 100, output_tokens: 10 }, elapsedMs: 1 });
+
+function autoHost() {
+	const fixture = selectionFixture();
+	fixture.config.jev.auto = true;
+	fixture.config.jev.task = "Standing brief";
+	const runtime = host(fixture.config, undefined, 20);
+	runtime.entries.splice(0, runtime.entries.length, ...fixture.view.entries);
+	runtime.ctx.cwd = fixture.view.cwd;
+	runtime.api.getAllTools = () => [{ name: "read",
+		sourceInfo: { source: "builtin", path: "<builtin:read>", scope: "temporary", origin: "top-level" } }] as ReturnType<JevApi["getAllTools"]>;
+	const selection = runtime.controller.selection;
+	const score = selection.score.bind(selection);
+	selection.score = (view, task, authorize, latest) => score(view, task, authorize, latest, scored);
+	const event = { toolName: "read", toolCallId: "old", input: { path: "source.ts" },
+		content: [{ type: "text", text: fixture.text }], isError: false };
+	return { ...runtime, fixture, selection, event };
+}
+
+const settle = () => new Promise(resolve => setTimeout(resolve, 100));
+
+test("auto mode scores an observed whitelisted read once under the standing task", async () => {
+	const { ctx, handlers, selection, event } = autoHost();
+	const onResult = handlers.get("tool_result");
+	assert.equal(typeof onResult, "function");
+	if (typeof onResult === "function") onResult(event, ctx);
+	await settle();
+	assert.equal(selection.stats.attempts, 1);
+	assert.equal(selection.readyTask, "Standing brief");
+});
+
+test("a new user input cancels a pending auto score", async () => {
+	const { ctx, handlers, selection, event } = autoHost();
+	const onResult = handlers.get("tool_result");
+	const input = handlers.get("input");
+	assert.equal(typeof onResult, "function");
+	assert.equal(typeof input, "function");
+	if (typeof onResult === "function") onResult(event, ctx);
+	if (typeof input === "function") input({}, ctx);
+	await settle();
+	assert.equal(selection.stats.attempts, 0);
+});
 
 test("only explicit continue starts a turn; ordinary input invalidates the task", async () => {
 	const { controller, ctx, sent, handlers } = scoringHost();

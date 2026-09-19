@@ -20,6 +20,9 @@ export interface JevConfig {
 	files: string[];
 	/** null is shadow mode; a non-null cutoff requires owner evaluation. */
 	dropBelow: number | null;
+	/** Score observed candidates without per-batch review; requires a non-empty task. */
+	auto: boolean;
+	task: string;
 }
 
 export interface DcpConfig {
@@ -162,7 +165,7 @@ export const ALWAYS_PROTECTED_TOOLS = new Set([
 export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	enabled: true,
 	debug: false,
-	jev: { enabled: false, project: "", files: [], dropBelow: null },
+	jev: { enabled: false, project: "", files: [], dropBelow: null, auto: false, task: "" },
 	pruneNotification: "minimal",
 	experimental: {
 		customPrompts: false,

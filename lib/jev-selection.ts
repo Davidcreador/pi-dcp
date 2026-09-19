@@ -31,16 +31,19 @@ export interface SelectionPolicy { hold: boolean; keep: Set<string>; omit: Map<s
 type Inference = (request: JevRequest, signal: AbortSignal) => Promise<JevResponse & { elapsedMs: number }>;
 
 function decodeConfig(value: unknown): JevConfig | null {
-	if (!isRecord(value) || !exactKeys(value, ["enabled", "project", "files", "dropBelow"])
+	if (!isRecord(value) || !exactKeys(value, ["enabled", "project", "files", "dropBelow", "auto", "task"])
 		|| typeof value.enabled !== "boolean" || typeof value.project !== "string"
 		|| !Array.isArray(value.files) || value.files.length > 64
 		|| !value.files.every((file: unknown): file is string => typeof file === "string" && file.length > 0
 			&& file.length <= 512 && !isAbsolute(file) && !/[\\\x00-\x1f\x7f]/.test(file)
 			&& file.split("/").every(part => part !== "" && part !== "." && part !== ".."))
 		|| (value.dropBelow !== null && (typeof value.dropBelow !== "number" || !Number.isFinite(value.dropBelow)
-			|| value.dropBelow < 0 || value.dropBelow > 0.1))) return null;
+			|| value.dropBelow < 0 || value.dropBelow > 0.1))
+		|| typeof value.auto !== "boolean" || typeof value.task !== "string" || Buffer.byteLength(value.task) > 2048) return null;
 	if (value.enabled && (!isAbsolute(value.project) || !value.files.length)) return null;
-	return { enabled: value.enabled, project: value.project, files: [...value.files], dropBelow: value.dropBelow };
+	if (value.auto && !value.task.trim()) return null;
+	return { enabled: value.enabled, project: value.project, files: [...value.files], dropBelow: value.dropBelow,
+		auto: value.auto, task: value.task };
 }
 
 function stamp(info: BigIntStats): string {
