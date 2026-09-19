@@ -37,6 +37,7 @@ import { loadConfig } from "./lib/config.ts";
 import { createJevController } from "./lib/jev.ts";
 import { Logger } from "./lib/logger.ts";
 import { runPipeline } from "./lib/pipeline.ts";
+import { countMessagesTokens, recordCall } from "./lib/telemetry.ts";
 import { createSessionState } from "./lib/state.ts";
 import { bumpLifetime } from "./lib/stats.ts";
 import { makeNudgeHandler } from "./lib/nudges.ts";
@@ -155,7 +156,17 @@ export default function piDcp(pi: ExtensionAPI): void {
 			const protectedIds = new Set([...policy.keep, ...policy.omit.keys()]);
 			const result = runPipeline(event.messages, config, state, logger, protectedIds);
 			notifyPipelineResult(ctx, config, state, result, logger);
-			return { messages: jev.selection.apply(result.messages, policy, event.messages) };
+			const messages = jev.selection.apply(result.messages, policy, event.messages);
+			const before = countMessagesTokens(event.messages);
+			const after = countMessagesTokens(messages);
+			recordCall(state, before, after);
+			logger.info("context call", {
+				before, after, removed: before - after,
+				dedupPruned: result.dedupPruned,
+				errorInputsPurged: result.errorInputsPurged,
+				compressionsApplied: result.compressionsApplied,
+			});
+			return { messages };
 		} catch (err) {
 			logger.error("pipeline crashed — passing messages through unchanged", {
 				error: err instanceof Error ? err.message : String(err),
@@ -225,7 +236,7 @@ export default function piDcp(pi: ExtensionAPI): void {
 					case "context":
 						return makeContextCommand(state)(subArgs, ctx);
 					case "stats":
-						return handleStats(subArgs, ctx);
+						return handleStats(subArgs, ctx, state);
 					case "manual":
 						return makeManualCommand(state)(subArgs, ctx);
 					case "sweep":

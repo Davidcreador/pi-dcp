@@ -8,6 +8,7 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { SessionState } from "../state.ts";
 import type { PanelRow, PanelSection } from "../ui/info-panel.ts";
+import { telemetrySummary } from "../telemetry.ts";
 import { showInfoPanel } from "../ui/info-panel.ts";
 
 function formatTokens(n: number): string {
@@ -79,6 +80,7 @@ export function makeContextCommand(state: SessionState) {
 						value: `~${formatTokens(state.stats.tokensSaved)}`,
 						valueColor: "success",
 					},
+					{ kind: "text", text: telemetrySummary(state) },
 				],
 			},
 		];

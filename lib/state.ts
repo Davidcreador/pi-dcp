@@ -44,6 +44,8 @@ export interface SessionState {
 	erroredAt: Map<string, number>;
 	/** Tool-call IDs we have already deduplicated this session (idempotency). */
 	dedupedCallIds: Set<string>;
+	/** Real per-call token totals measured on the outgoing message list. */
+	callTelemetry: { calls: number; tokensBefore: number; tokensAfter: number };
 	/** Tool-call IDs whose error inputs have been purged (idempotency). */
 	purgedErrorCallIds: Set<string>;
 	/** Tool-call IDs that have already had a compression applied (idempotency for stats). */
@@ -85,6 +87,7 @@ export function createSessionState(): SessionState {
 		turnIndex: 0,
 		erroredAt: new Map(),
 		dedupedCallIds: new Set(),
+		callTelemetry: { calls: 0, tokensBefore: 0, tokensAfter: 0 },
 		purgedErrorCallIds: new Set(),
 		appliedCompressionTargets: new Set(),
 		lastSoftNudgeTurn: -Infinity,

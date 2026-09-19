@@ -46,6 +46,7 @@ interface PersistedState {
 	purgedErrorCallIds: string[];
 	appliedCompressionTargets: string[];
 	erroredAt: Array<[string, number]>;
+	callTelemetry?: { calls: number; tokensBefore: number; tokensAfter: number };
 	stats?: {
 		dedupPruned: number;
 		errorInputsPurged: number;
@@ -115,6 +116,7 @@ export function saveSessionState(
 			purgedErrorCallIds: Array.from(state.purgedErrorCallIds),
 			appliedCompressionTargets: Array.from(state.appliedCompressionTargets),
 			erroredAt: Array.from(state.erroredAt.entries()),
+			callTelemetry: { ...state.callTelemetry },
 			stats: { ...state.stats },
 		};
 
@@ -182,6 +184,12 @@ export function restoreSessionState(
 			for (const [id, turn] of data.erroredAt)
 				if (typeof id === "string" && typeof turn === "number")
 					state.erroredAt.set(id, turn);
+		}
+		if (data.callTelemetry) {
+			const t = data.callTelemetry;
+			if (typeof t.calls === "number") state.callTelemetry.calls = t.calls;
+			if (typeof t.tokensBefore === "number") state.callTelemetry.tokensBefore = t.tokensBefore;
+			if (typeof t.tokensAfter === "number") state.callTelemetry.tokensAfter = t.tokensAfter;
 		}
 		if (data.stats) {
 			state.stats.dedupPruned = data.stats.dedupPruned ?? 0;

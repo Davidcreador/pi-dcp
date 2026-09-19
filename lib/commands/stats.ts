@@ -6,6 +6,8 @@
  */
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { readLifetime } from "../stats.ts";
+import { telemetrySummary } from "../telemetry.ts";
+import type { SessionState } from "../state.ts";
 import { showInfoPanel } from "../ui/info-panel.ts";
 
 function formatTokens(n: number): string {
@@ -25,11 +27,15 @@ function humanizeAgo(firstSeen: number): string {
 export async function handleStats(
 	_args: string,
 	ctx: ExtensionCommandContext,
+	state: SessionState,
 ): Promise<void> {
 	const s = readLifetime();
 	await showInfoPanel(ctx, {
 		title: "pi-dcp / lifetime stats",
 		sections: [
+			{
+				rows: [{ kind: "text", text: telemetrySummary(state) }],
+			},
 			{
 				rows: [
 					{ kind: "kv", label: "active since", value: humanizeAgo(s.firstSeen) },
