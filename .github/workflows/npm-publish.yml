@@ -31,12 +31,11 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      # Same dev-dep dance as CI \u2014 lets prepublishOnly run tsc + tests.
-      - name: Install dev dependencies
+      # Same install as CI (peers from package-lock.json) so prepublishOnly can run tsc + tests.
+      - name: Install dependencies
         run: |
-          npm install --no-save --silent \
-            typescript@latest \
-            @earendil-works/pi-coding-agent@latest
+          npm ci --silent
+          npm install --no-save --silent typescript@latest
 
       # Sanity-check the version in package.json matches the tag.
       - name: Verify tag matches package.json
