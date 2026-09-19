@@ -36,6 +36,8 @@ export interface DcpConfig {
 	turnProtection: {
 		enabled: boolean;
 		turns: number;
+		/** Cap on assistant steps protected within the recent turns; long agentic turns expose older steps to pruning. */
+		maxSteps: number;
 	};
 	experimental: {
 		/**
@@ -168,6 +170,7 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	turnProtection: {
 		enabled: true,
 		turns: 3,
+		maxSteps: 30,
 	},
 	manualMode: {
 		enabled: false,

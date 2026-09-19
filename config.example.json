@@ -17,7 +17,8 @@
   },
   "turnProtection": {
     "enabled": true,
-    "turns": 3
+    "turns": 3,
+    "maxSteps": 30
   },
   "compress": {
     "mode": "range",

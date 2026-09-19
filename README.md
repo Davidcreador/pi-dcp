@@ -167,7 +167,8 @@ The shipped defaults are tuned for real-world long sessions — see `config.exam
 
   "turnProtection": {
     "enabled": true,
-    "turns": 3
+    "turns": 3,
+    "maxSteps": 30
   },
 
   "compress": {
@@ -224,6 +225,7 @@ Field notes:
 - `experimental.customPrompts`: when `true`, honors `prompts/overrides/*.md`.
 - `manualMode.automaticStrategies`: when manual mode is on, still run dedup and purge.
 - `turnProtection.turns`: last N user-bounded turns are immune to pruning.
+- `turnProtection.maxSteps`: cap on assistant steps protected within those turns; long agentic turns expose older steps to pruning.
 - `compress.minContextLimit` / `maxContextLimit`: number of tokens or a `"X%"` string of the model's context window.
 - `compress.nudgeEveryTurns`: per-turn soft-nudge throttle.
 - `compress.nudgeFrequency`: per-request soft-nudge throttle (stacks with the per-turn one).

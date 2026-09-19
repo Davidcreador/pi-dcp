@@ -108,7 +108,7 @@ export function runPipeline<T extends AnyMessage>(
 	// turnProtection is disabled. ALL strategies and stored compressions must
 	// honor this set — it's the user's promise that recent work is untouched.
 	const protectedByTurn = config.turnProtection.enabled
-		? protectedByRecency(originalMessages, config.turnProtection.turns)
+		? protectedByRecency(originalMessages, config.turnProtection.turns, config.turnProtection.maxSteps)
 		: new Set<string>();
 	for (const id of protectedIds) protectedByTurn.add(id);
 	for (const id of suspendedTargets(state)) protectedByTurn.add(id);

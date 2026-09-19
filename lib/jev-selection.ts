@@ -81,6 +81,7 @@ export class JevSelection {
 		elapsedMs: 0, approvalMs: 0, protectionBlocked: false, currentEstimatedTokensRemoved: 0, currentResultsOmitted: 0 };
 	private readonly protectedTools: Set<string>;
 	private readonly turns: number;
+	private readonly maxSteps: number;
 	private readonly sources = new Map<string, SourceSnapshot>();
 	private readonly scores = new Map<string, { candidate: Candidate; probability: number; model: string }>();
 	private readonly attempted = new Set<string>();
@@ -96,6 +97,8 @@ export class JevSelection {
 		this.options = decodeConfig(config.jev);
 		this.turns = config.turnProtection.enabled && Number.isSafeInteger(config.turnProtection.turns)
 			? Math.max(3, config.turnProtection.turns) : 3;
+		this.maxSteps = config.turnProtection.enabled && Number.isSafeInteger(config.turnProtection.maxSteps)
+			? Math.max(1, config.turnProtection.maxSteps) : Infinity;
 		this.protectedTools = new Set([...ALWAYS_PROTECTED_TOOLS, ...config.compress.protectedTools,
 			...config.strategies.deduplication.protectedTools, ...config.strategies.purgeErrors.protectedTools]);
 	}
@@ -163,7 +166,7 @@ export class JevSelection {
 	private candidates(view: SelectionView): Candidate[] {
 		const pins = protectedCalls(view);
 		if (!pins) return [];
-		const recent = protectedByRecency(view.messages, this.turns);
+		const recent = protectedByRecency(view.messages, this.turns, this.maxSteps);
 		const result: Candidate[] = [];
 		for (const entry of view.entries) {
 			if (result.length === MAX_CANDIDATES) break;
@@ -208,7 +211,7 @@ export class JevSelection {
 			if (!approved) return "declined";
 			const current = latest();
 			const pins = protectedCalls(current);
-			const recent = protectedByRecency(current.messages, this.turns);
+			const recent = protectedByRecency(current.messages, this.turns, this.maxSteps);
 			if (epoch !== this.epoch || !pins || candidates.some(candidate => !this.current(candidate, current, recent, pins))) return "stale";
 			for (const candidate of candidates) this.attempted.add(candidate.original.ref.digest);
 			this.stats.attempts++;
@@ -221,7 +224,7 @@ export class JevSelection {
 			if (epoch !== this.epoch) return "stale";
 			const now = latest();
 			const nowPins = protectedCalls(now);
-			const nowRecent = protectedByRecency(now.messages, this.turns);
+			const nowRecent = protectedByRecency(now.messages, this.turns, this.maxSteps);
 			if (!nowPins || candidates.some(candidate => !this.current(candidate, now, nowRecent, nowPins))) return "stale";
 			if (response.probabilities.size !== candidates.length) throw new Error("Unexpected Jev judgments");
 			const judgments: Array<{ candidate: Candidate; probability: number; model: string }> = [];
@@ -264,7 +267,7 @@ export class JevSelection {
 			this.stats.protectionBlocked = true;
 			return { hold: true, keep, omit };
 		}
-		const recent = protectedByRecency(view.messages, this.turns);
+		const recent = protectedByRecency(view.messages, this.turns, this.maxSteps);
 
 		// Only SCORED candidates are protected from the deterministic strategies:
 		// scored-and-retained results join keep, scored-and-droppable ones go to

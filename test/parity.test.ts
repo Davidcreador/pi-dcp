@@ -69,6 +69,33 @@ test("protectedByRecency: turns=0 returns empty set", () => {
 	assert.equal(set.size, 0);
 });
 
+test("protectedByRecency: maxSteps caps protection inside one long turn", () => {
+	const msgs: AnyMessage[] = [user()];
+	for (let i = 1; i <= 50; i++) msgs.push(asst(`c${i}`), tr(`c${i}`));
+	const set = protectedByRecency(msgs, 3, 30);
+	assert.equal(set.size, 30);
+	for (let i = 21; i <= 50; i++) assert.ok(set.has(`c${i}`), `c${i} should be protected`);
+	for (let i = 1; i <= 20; i++) assert.ok(!set.has(`c${i}`), `c${i} should be exposed`);
+});
+
+test("protectedByRecency: no maxSteps cap protects the whole turn (legacy)", () => {
+	const msgs: AnyMessage[] = [user()];
+	for (let i = 1; i <= 50; i++) msgs.push(asst(`c${i}`), tr(`c${i}`));
+	assert.equal(protectedByRecency(msgs, 3).size, 50);
+	assert.equal(protectedByRecency(msgs, 3, Infinity).size, 50);
+});
+
+test("protectedByRecency: a user boundary still stops before the cap", () => {
+	const msgs: AnyMessage[] = [user()];
+	for (let i = 1; i <= 40; i++) msgs.push(asst(`c${i}`), tr(`c${i}`));
+	msgs.push(user());
+	for (let i = 41; i <= 45; i++) msgs.push(asst(`c${i}`), tr(`c${i}`));
+	// turns=1 stops at the second user message after only 5 steps — well under maxSteps=30.
+	const set = protectedByRecency(msgs, 1, 30);
+	assert.equal(set.size, 5);
+	for (let i = 41; i <= 45; i++) assert.ok(set.has(`c${i}`));
+});
+
 test("turnProtection prevents dedup of recent turn results", () => {
 	// c1 and c2 are identical grep calls (would normally dedup); both inside
 	// the protected window. c0 is older and same key — should dedup against

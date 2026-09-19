@@ -258,12 +258,18 @@ export const PURGE_ARGS_MARKER = "[args purged by pi-dcp]";
  * protected window. While the counter is <= `turns`, collect tool-call IDs
  * from every assistant tool call and every tool result we see.
  *
- * `turns <= 0` returns an empty set (protection disabled).
+ * `turns <= 0` returns an empty set (protection disabled). `maxSteps` caps how
+ * many assistant steps back the window extends: once that many assistant
+ * messages have been counted, nothing older is added even inside the turn
+ * window (a single long agentic turn would otherwise protect everything).
+ * `maxSteps <= 0` or non-finite means no cap.
  */
-export function protectedByRecency(messages: AnyMessage[], turns: number): Set<string> {
+export function protectedByRecency(messages: AnyMessage[], turns: number, maxSteps = Infinity): Set<string> {
 	if (!Number.isFinite(turns) || turns <= 0) return new Set();
+	const capped = Number.isFinite(maxSteps) && maxSteps > 0;
 	const out = new Set<string>();
 	let userCount = 0;
+	let steps = 0;
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const m = messages[i];
 		if (isUser(m)) {
@@ -273,11 +279,13 @@ export function protectedByRecency(messages: AnyMessage[], turns: number): Set<s
 			if (userCount >= turns) break;
 			continue;
 		}
+		if (capped && steps >= maxSteps) break;
 		if (isToolResult(m)) {
 			out.add(m.toolCallId);
 			continue;
 		}
 		if (isAssistant(m)) {
+			steps++;
 			for (const c of m.content) {
 				if (isToolCall(c)) out.add(c.id);
 			}

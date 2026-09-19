@@ -134,6 +134,26 @@ test("idempotent: a second run adds nothing to counts or stats", () => {
 	assert.equal(state.stats.decayed, 1);
 });
 
+test("decay reaches old results inside one long turn when turnProtection is step-capped", () => {
+	const cfg = lenientConfig();
+	cfg.turnProtection = { enabled: true, turns: 3, maxSteps: 30 };
+	// One turn, 40 steps, no user boundary: only the newest 30 are protected,
+	// so the big result at step 1 is exposed to decay.
+	const msgs: AnyMessage[] = [
+		mkAssistantWithCall("g1", "bash", { command: "seq 400" }),
+		mkToolResult("g1", "bash", BIG_BODY),
+	];
+	for (let i = 2; i <= 40; i++) {
+		msgs.push(
+			mkAssistantWithCall(`s${i}`, "grep", { q: `query-${i}` }),
+			mkToolResult(`s${i}`, "grep", `hit ${i}`),
+		);
+	}
+	const r = runPipeline(msgs, cfg, createSessionState(), silentLogger);
+	assert.equal(r.decayed, 1);
+	assert.match(text(r.messages[1]).text, /\[pi-dcp excerpt:/);
+});
+
 test("runPipeline does not mutate the original result", () => {
 	const msgs = aged(BIG_BODY);
 	const snapshot = JSON.parse(JSON.stringify(msgs));
