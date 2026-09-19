@@ -197,7 +197,7 @@ export function placeholderToolResult(m: ToolResultMessage, reason: string): num
 	m.content = [
 		{
 			type: "text",
-			text: `${PRUNED_PLACEHOLDER_PREFIX} ${reason}]`,
+			text: `${PRUNED_PLACEHOLDER_PREFIX} ${reason}] (recall toolCallId=${m.toolCallId} restores it)`,
 		},
 	];
 	m.details = undefined;
@@ -221,7 +221,7 @@ export function compressionPlaceholderToolResult(
 	m.content = [
 		{
 			type: "text",
-			text: `${COMPRESSION_PLACEHOLDER_PREFIX} #${compressionId}: ${topic}] (see /dcp decompress ${compressionId} to restore)`,
+			text: `${COMPRESSION_PLACEHOLDER_PREFIX} #${compressionId}: ${topic}] (see /dcp decompress ${compressionId} to restore) (recall toolCallId=${m.toolCallId} restores the original)`,
 		},
 	];
 	m.details = undefined;

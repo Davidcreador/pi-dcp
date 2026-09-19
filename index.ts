@@ -45,6 +45,7 @@ import { notifyPipelineResult, refreshFooterStatus } from "./lib/notifications.t
 import { PromptStore } from "./lib/prompts/index.ts";
 import { createCompressMessageTool } from "./lib/tools/compress-message.ts";
 import { createCompressRangeTool } from "./lib/tools/compress-range.ts";
+import { createRecallTool } from "./lib/tools/recall.ts";
 import { handleHelp } from "./lib/commands/help.ts";
 import { handleStats } from "./lib/commands/stats.ts";
 import { makeContextCommand } from "./lib/commands/context.ts";
@@ -203,15 +204,17 @@ export default function piDcp(pi: ExtensionAPI): void {
 		}
 	});
 
-	// 4. Compress tool: one variant based on configured mode.
+	// 4. Compress tool: one variant based on configured mode. The read-only
+	//    recall tool is always available — it restores, never prunes.
+	const toolCtx = { state, logger, config };
 	if (config.compress.permission !== "deny") {
-		const toolCtx = { state, logger, config };
 		if (config.compress.mode === "range") {
 			pi.registerTool(createCompressRangeTool(toolCtx, prompts));
 		} else {
 			pi.registerTool(createCompressMessageTool(toolCtx, prompts));
 		}
 	}
+	pi.registerTool(createRecallTool(toolCtx));
 
 	// 5. Throttled system-prompt nudges.
 	pi.on("before_agent_start", makeNudgeHandler(config, state, prompts));
