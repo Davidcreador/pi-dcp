@@ -6,6 +6,78 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-18
+
+Deterministic pruning that actually fires. An audit of 756 persisted sessions
+showed ~84% of context tokens are tool results (52% `read`, 25% `bash`), while
+the LLM-driven `compress` tool had been called 7 times ever and exact-key dedup
+matched only 4% of repeat reads. 0.3.0 adds zero-model-cost strategies with a
+lossless escape hatch. Replaying the six largest real sessions, tokens removed
+per model call went from 4.6–16.0% to 44.5–54.2%.
+
+Pipeline order is now: compressions → dedup → **overlapDedup** → **supersession**
+→ **sizeAgeDecay** → purgeErrors → Jev omit.
+
+### Added
+
+- **`recall` tool** (`lib/tools/recall.ts`). `recall({toolCallId})` returns the
+  original persisted tool result verbatim (images omitted with a note). Every
+  placeholder pi-dcp emits now names its `toolCallId`, so the model can reverse
+  any omission itself. This is what makes the strategies below safe to run
+  aggressively.
+- **Overlap dedup** (`strategies.overlapDedup`). An older `read` whose line range
+  is fully contained in a newer `read` of the same file is placeholdered. Simple
+  bash equivalents — `cat`, `head -n N`, `tail -n N`, `sed -n 'a,bp'` on a single
+  literal path — count as reads; anything with pipes, `;`, `&`, redirects or
+  globs is ignored.
+- **Supersession** (`strategies.supersession`). A read of a path that precedes a
+  later *successful* `edit`/`write` of the same path is placeholdered. Failed
+  edits do not supersede.
+- **Size/age decay** (`strategies.sizeAgeDecay`). Tool results above `minTokens`
+  (1500) and older than `minAgeSteps` (12) assistant steps are reduced to a
+  `headLines` (30) + `tailLines` (15) excerpt with a recall marker. Age is
+  measured in assistant steps, so a long agentic turn ages its own early output.
+  Skipped when the excerpt would not save at least 40%.
+- **Per-call telemetry** (`lib/telemetry.ts`). Outgoing context is measured
+  before and after every model call; `/dcp stats` and `/dcp context` show
+  `this session: N calls, avg X tokens/call sent, Y% removed by dcp`. Persisted
+  with session state.
+- **`turnProtection.maxSteps`** (default 30). Caps the recency-protected window
+  in assistant steps so one long agentic turn can no longer shield unlimited
+  history from pruning. `<= 0` keeps the legacy user-turn-only behaviour.
+- **Jev context selection** (`config.jev`, opt-in). Full reads of owner-whitelisted
+  files (≤ 6KB, byte-identical to disk) are scored by TypeSafe Jev for
+  P(still needed); results below `dropBelow` are placeholdered.
+  `dropBelow: null` is shadow mode. `/dcp jev score|stats|recall|cancel|continue`.
+- **Jev auto mode** (`config.jev.auto` + `config.jev.task`). A qualifying
+  whitelist read schedules a scoring batch after a 10s debounce (cancelled by
+  new user input or a branch switch) using the standing task brief, without the
+  per-batch editor review. Auto mode never starts a model turn.
+
+### Fixed
+
+- **Jev over-protection.** In a jev-enabled project the policy marked *every*
+  tool result as kept, silently disabling dedup and error purge there. Unscored
+  results now fall through to the deterministic strategies, and hitting the
+  4-attempt budget no longer discards existing scores.
+- **Seconds-per-call tokenizer cost.** Placeholders, purge-errors savings and Jev
+  omission accounting re-tokenized every pruned result on every pass. The hot
+  path now uses `chars / 4` estimates (9.8 ms vs 16.5 s on 300 × 22KB results);
+  precise counting remains only in recall and recovery paths.
+- **CI bitrot.** Workflows installed `@earendil-works/pi-coding-agent@latest`,
+  which since 0.85 no longer hoists `pi-tui`/`pi-agent-core`/`@types/node` over
+  the 0.74 lockfile, breaking `tsc` and two test files. Workflows now `npm ci`
+  from the lockfile.
+
+### Changed
+
+- **Breaking:** `config.jev` is an exact six-key object
+  (`enabled, project, files, dropBelow, auto, task`). A four-key block from a
+  pre-release build decodes as invalid and disables Jev. See `config.example.json`.
+- `auto: true` with an empty `task` is rejected as invalid config.
+- All savings and telemetry figures (`tokensSaved`, markers, `/dcp stats`) are
+  `chars / 4` estimates, consistently, rather than tokenizer counts.
+
 ## [0.2.0] — 2026-05-19
 
 ### Fixed (root causes vs opencode-dcp)
