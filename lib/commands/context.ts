@@ -8,6 +8,7 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { SessionState } from "../state.ts";
 import type { PanelRow, PanelSection } from "../ui/info-panel.ts";
+import { telemetrySummary } from "../telemetry.ts";
 import { showInfoPanel } from "../ui/info-panel.ts";
 
 function formatTokens(n: number): string {
@@ -65,6 +66,21 @@ export function makeContextCommand(state: SessionState) {
 					},
 					{
 						kind: "kv",
+						label: "superseded reads pruned",
+						value: state.stats.overlapPruned.toLocaleString(),
+					},
+					{
+						kind: "kv",
+						label: "stale reads superseded",
+						value: state.stats.superseded.toLocaleString(),
+					},
+					{
+						kind: "kv",
+						label: "old outputs excerpted",
+						value: state.stats.decayed.toLocaleString(),
+					},
+					{
+						kind: "kv",
 						label: "errored tool inputs purged",
 						value: state.stats.errorInputsPurged.toLocaleString(),
 					},
@@ -79,6 +95,7 @@ export function makeContextCommand(state: SessionState) {
 						value: `~${formatTokens(state.stats.tokensSaved)}`,
 						valueColor: "success",
 					},
+					{ kind: "text", text: telemetrySummary(state) },
 				],
 			},
 		];

@@ -31,14 +31,20 @@ import {
 	protectedByRecency,
 } from "./messages.ts";
 import { applyDeduplication } from "./strategies/deduplication.ts";
+import { applyOverlapDedup } from "./strategies/overlap-dedup.ts";
+import { applySupersession } from "./strategies/supersession.ts";
+import { applySizeAgeDecay } from "./strategies/size-age-decay.ts";
 import { applyPurgeErrors } from "./strategies/purge-errors.ts";
-import type { CompressionRecord, SessionState } from "./state.ts";
+import { suspendedTargets, type CompressionRecord, type SessionState } from "./state.ts";
 import { bumpLifetime } from "./stats.ts";
 
-export interface PipelineResult {
+export interface PipelineResult<T extends AnyMessage = AnyMessage> {
 	/** New messages array to hand back to pi. Same shape as input, mutation-safe. */
-	messages: AnyMessage[];
+	messages: T[];
 	dedupPruned: number;
+	overlapPruned: number;
+	superseded: number;
+	decayed: number;
 	errorInputsPurged: number;
 	compressionsApplied: number;
 	tokensSaved: number;
@@ -84,12 +90,13 @@ function compressionsByToolCallId(state: SessionState): Map<string, CompressionR
 	return out;
 }
 
-export function runPipeline(
-	originalMessages: AnyMessage[],
+export function runPipeline<T extends AnyMessage>(
+	originalMessages: T[],
 	config: DcpConfig,
 	state: SessionState,
-	logger: Logger,
-): PipelineResult {
+	logger: Pick<Logger, "info">,
+	protectedIds: ReadonlySet<string> = new Set(),
+): PipelineResult<T> {
 	// Manual mode can optionally disable auto strategies (dedup + purgeErrors).
 	// Compressions are user-triggered (sweep or LLM-via-compress), so we always
 	// apply them regardless of manual mode.
@@ -101,23 +108,28 @@ export function runPipeline(
 	// turnProtection is disabled. ALL strategies and stored compressions must
 	// honor this set — it's the user's promise that recent work is untouched.
 	const protectedByTurn = config.turnProtection.enabled
-		? protectedByRecency(originalMessages, config.turnProtection.turns)
+		? protectedByRecency(originalMessages, config.turnProtection.turns, config.turnProtection.maxSteps)
 		: new Set<string>();
+	for (const id of protectedIds) protectedByTurn.add(id);
+	for (const id of suspendedTargets(state)) protectedByTurn.add(id);
 
 	const summaries = compressionsByToolCallId(state);
 	const compressionTargets = new Set(summaries.keys());
 
 	// Build a fresh working array. Each entry is either the original message
 	// (when nothing in this pipeline will touch it) or a clone we can mutate.
-	const messages: AnyMessage[] = new Array(originalMessages.length);
+	const messages: T[] = new Array(originalMessages.length);
 	for (let i = 0; i < originalMessages.length; i++) {
 		const m = originalMessages[i];
 		messages[i] = needsClone(m, config, state, compressionTargets) ? cloneForMutation(m) : m;
 	}
 
-	const result: PipelineResult = {
+	const result: PipelineResult<T> = {
 		messages,
 		dedupPruned: 0,
+		overlapPruned: 0,
+		superseded: 0,
+		decayed: 0,
 		errorInputsPurged: 0,
 		compressionsApplied: 0,
 		tokensSaved: 0,
@@ -158,22 +170,43 @@ export function runPipeline(
 		result.dedupPruned = dedup.prunedCount;
 		result.tokensSaved += dedup.tokensSaved;
 
-		// 3. Purge errored tool inputs.
+		// 3. Overlap dedup (reads fully covered by a newer read of the same file).
+		const overlap = applyOverlapDedup(messages, config, state, protectedByTurn);
+		result.overlapPruned = overlap.prunedCount;
+		result.tokensSaved += overlap.tokensSaved;
+
+		// 4. Supersession (reads made stale by a later edit/write).
+		const superseded = applySupersession(messages, config, state, protectedByTurn);
+		result.superseded = superseded.supersededCount;
+		result.tokensSaved += superseded.tokensSaved;
+
+		// 5. Size×age decay (old large outputs become head+tail excerpts).
+		const decay = applySizeAgeDecay(messages, config, state, protectedByTurn);
+		result.decayed = decay.decayedCount;
+		result.tokensSaved += decay.tokensSaved;
+
+		// 6. Purge errored tool inputs.
 		const purged = applyPurgeErrors(messages, config, state, protectedByTurn);
 		result.errorInputsPurged = purged.purgedCount;
 		result.tokensSaved += purged.tokensSaved;
 	}
 
-	if (result.dedupPruned || result.errorInputsPurged || result.compressionsApplied) {
+	if (result.dedupPruned || result.overlapPruned || result.superseded || result.decayed || result.errorInputsPurged || result.compressionsApplied) {
 		state.stats.compressionsApplied += result.compressionsApplied;
 		logger.info("pipeline applied", {
 			dedupPruned: result.dedupPruned,
+			overlapPruned: result.overlapPruned,
+			superseded: result.superseded,
+			decayed: result.decayed,
 			errorInputsPurged: result.errorInputsPurged,
 			compressionsApplied: result.compressionsApplied,
 			tokensSaved: result.tokensSaved,
 		});
 		bumpLifetime({
 			dedupPruned: result.dedupPruned,
+			overlapPruned: result.overlapPruned,
+			superseded: result.superseded,
+			decayed: result.decayed,
 			errorInputsPurged: result.errorInputsPurged,
 			compressionsApplied: result.compressionsApplied,
 			tokensSaved: result.tokensSaved,

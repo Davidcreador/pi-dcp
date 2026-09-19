@@ -9,7 +9,7 @@ description: Use the pi-dcp Dynamic Context Pruning tools and slash commands to 
 
 1. **Automatic deduplication** — When the same tool is called with the same arguments more than once, only the latest output is sent to the LLM. Older duplicates are replaced with `[pruned by pi-dcp: duplicate ... call]`.
 2. **Errored input purging** — Tool calls that errored out have their *inputs* stripped after `strategies.purgeErrors.turns` turns (default: 4). The error message is preserved so the model can still recover; only the (often huge) failed payload is removed.
-3. **LLM-callable `compress` tool** — The model can decide to summarize closed work-streams into a lossless technical summary. The summary replaces the original tool outputs on the next LLM request.
+3. **LLM-callable `compress` tool** — The model can decide to summarize closed work-streams into a technical summary. The summary replaces the original tool outputs on the next LLM request.
 
 ## When to call `compress`
 
@@ -30,8 +30,44 @@ Call `compress(toolCallIds, topic, summary)` when:
 | `/dcp stats` | Cumulative lifetime DCP savings across all sessions |
 | `/dcp sweep [n]` | Stage a compression over the last `n` tool results (default: since last user msg) |
 | `/dcp manual [on\|off\|toggle\|status]` | Control runtime manual mode (edit config to persist) |
-| `/dcp decompress <id>` | Temporarily restore a compression's original tool outputs |
-| `/dcp recompress <id>` | Re-apply a previously decompressed entry |
+| `/dcp decompress <id>` | Confirm durable protection and suspend a compression; archived output requires recall |
+| `/dcp recompress <id>` | Release the compression's protection reason, not independent owner pins |
+| `/dcp jev stats` | Inspect judgments, IDs, model, overhead and estimated reductions |
+| `/dcp jev score <task>` | Owner confirms one complete task/source payload before TypeSafe inference |
+| `/dcp jev continue` | Explicitly confirm one turn for the scored task |
+| `/dcp jev cancel` | Invalidate transient decisions, not pins |
+| `/dcp jev restore\|release\|recall <result-entry-id>` | Native-confirmed protection or bounded exact-text recall |
+
+## Experimental Jev selection
+
+Disabled by default; configure `jev` only in owner-global `~/.pi-dcp/config.json`.
+The exact canonical project/file allowlist does not authorize automatic uploads:
+each batch requires native confirmation and the complete unchanged payload preview.
+RPC dialogs and user-role text do not grant authority. No key lookup or network
+request occurs for disabled, ineligible or declined batches.
+
+Only observed, successful whole-file text reads with exact bounded source/output
+matching are eligible. Unknown/partial/truncated/image results, pins and at least
+three recent user turns remain visible. A trusted runtime is required; source tags
+alone do not attest tool overrides. Read the full payload: path filters are not
+secret detection.
+
+`dropBelow: null` is shadow mode. No numeric cutoff is calibrated. Opt-in retention
+also blocks legacy DCP strategies from bypassing protected/uncertain content, so
+it may use more tokens than ordinary DCP in the configured project. Other canonical
+projects keep ordinary DCP plus independent pins; unresolved scope fails closed.
+New input, changed tasks, compaction and navigation invalidate decisions. Scoring never starts a turn; `continue` explicitly
+does. Recall requires idle/headroom and appends labelled exact text to the current
+branch without starting a turn or fabricating an old tool result.
+
+Pins are durable against DCP, not native compaction. `/dcp recompress` lists durable
+compression protection even after sidecar loss; `recompress <id>` releases only that
+reason after native confirmation, without recreating an unavailable summary.
+Invalid/foreign metadata holds
+pruning closed; do not repair it by searching other sessions or releasing pins
+from assistant/peer prose. Inspect `protectionBlocked` in stats. Synthetic tests
+are not accuracy, cache, billing or workflow-latency evidence. See README for bounds
+and the evaluation prerequisites.
 
 ## Configuration
 

@@ -4,10 +4,9 @@
  *
  * Critical invariants:
  *
- * 1. Every ToolCall in an assistant message MUST be matched by exactly one
- *    ToolResultMessage immediately after it. When we "prune" a tool we
- *    therefore REPLACE the content of the ToolResultMessage with a short
- *    placeholder, never remove it. Many providers reject orphaned tool calls.
+ * 1. Preserve tool-call/result envelopes and their original ordering. When
+ *    we "prune" a tool we REPLACE its result body with a short placeholder,
+ *    never remove the result. Providers reject orphaned tool calls.
  *
  * 2. The `messages` array we receive contains references to message objects
  *    that the session manager still holds. Mutating them in place corrupts
@@ -15,23 +14,21 @@
  *    structures we plan to write to) before modifying it, and emit a fresh
  *    array via ContextEventResult.
  *
- * Type shapes mirror @earendil-works/pi-ai. We use structural types instead of
- * importing the full AgentMessage union — that keeps the file self-contained
- * and avoids leaking optional fields the pipeline never inspects.
+ * Common roles use structural field subsets compatible with pi-ai messages.
+ * Other SDK roles pass through unchanged; generic callers retain their full types.
  */
+
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 export interface TextContent {
 	type: "text";
 	text: string;
-	[k: string]: unknown;
 }
 export interface ImageContent {
 	type: "image";
-	[k: string]: unknown;
 }
 export interface ThinkingContent {
 	type: "thinking";
-	[k: string]: unknown;
 }
 
 /** Pi-ai's ToolCall uses `arguments`, not `input`. Critical to get right. */
@@ -40,7 +37,6 @@ export interface ToolCall {
 	id: string;
 	name: string;
 	arguments: Record<string, unknown>;
-	[k: string]: unknown;
 }
 
 export type AssistantContent = TextContent | ThinkingContent | ToolCall;
@@ -51,14 +47,12 @@ export interface UserMessage {
 	role: "user";
 	content: string | UserContent[];
 	timestamp: number;
-	[k: string]: unknown;
 }
 
 export interface AssistantMessage {
 	role: "assistant";
 	content: AssistantContent[];
 	timestamp: number;
-	[k: string]: unknown;
 }
 
 export interface ToolResultMessage {
@@ -69,10 +63,10 @@ export interface ToolResultMessage {
 	details?: unknown;
 	isError: boolean;
 	timestamp: number;
-	[k: string]: unknown;
 }
 
-export type AnyMessage = UserMessage | AssistantMessage | ToolResultMessage;
+export type AnyMessage = UserMessage | AssistantMessage | ToolResultMessage
+	| Exclude<AgentMessage, { role: "user" | "assistant" | "toolResult" }>;
 
 export function isToolResult(m: AnyMessage): m is ToolResultMessage {
 	return (m as { role?: string }).role === "toolResult";
@@ -144,7 +138,17 @@ export function toolCallKey(call: { name: string; arguments: Record<string, unkn
 import { approxTokens as _approxTokens } from "./tokens.ts";
 export { approxTokens } from "./tokens.ts";
 
-/** Approximate token count for a ToolResultMessage's content payload. */
+/** Character size of a ToolResultMessage's content payload (+1024 per image, mirroring the 256-token placeholder). */
+export function toolResultChars(m: ToolResultMessage): number {
+	let n = 0;
+	for (const c of m.content) {
+		if ((c as TextContent).type === "text") n += (c as TextContent).text.length;
+		else n += 1024;
+	}
+	return n;
+}
+
+/** Precise token count for a ToolResultMessage's payload. Only for one-shot tool surfaces (recall details); the pipeline uses toolResultChars estimates. */
 export function toolResultTokens(m: ToolResultMessage): number {
 	let n = 0;
 	for (const c of m.content) {
@@ -181,6 +185,8 @@ export function cloneForMutation<T extends AnyMessage>(m: T): T {
 
 const PRUNED_PLACEHOLDER_PREFIX = "[pruned by pi-dcp:";
 const COMPRESSION_PLACEHOLDER_PREFIX = "[pi-dcp compression";
+/** Marks a size×age excerpt. NOT a placeholder — excerpts carry real content and must stay visible to pruning checks. */
+export const EXCERPT_MARKER_PREFIX = "[pi-dcp excerpt:";
 
 /** True if this tool result's content is already a pi-dcp placeholder. Used to keep the pipeline idempotent. */
 export function isAlreadyPlaceholder(m: ToolResultMessage): boolean {
@@ -192,6 +198,11 @@ export function isAlreadyPlaceholder(m: ToolResultMessage): boolean {
 	);
 }
 
+/** True if this tool result already carries a size×age excerpt (marker lives inside the text block). */
+export function isExcerpt(m: ToolResultMessage): boolean {
+	return m.content.some(c => (c as TextContent).type === "text" && (c as TextContent).text.includes(EXCERPT_MARKER_PREFIX));
+}
+
 /**
  * Replace a tool result's content with a short placeholder. Returns the
  * estimated tokens removed. Idempotent — if already a placeholder, returns 0.
@@ -199,16 +210,16 @@ export function isAlreadyPlaceholder(m: ToolResultMessage): boolean {
  */
 export function placeholderToolResult(m: ToolResultMessage, reason: string): number {
 	if (isAlreadyPlaceholder(m)) return 0;
-	const before = toolResultTokens(m);
+	const before = toolResultChars(m);
 	m.content = [
 		{
 			type: "text",
-			text: `${PRUNED_PLACEHOLDER_PREFIX} ${reason}]`,
+			text: `${PRUNED_PLACEHOLDER_PREFIX} ${reason}] (recall toolCallId=${m.toolCallId} restores it)`,
 		},
 	];
 	m.details = undefined;
-	const after = toolResultTokens(m);
-	return Math.max(0, before - after);
+	const after = toolResultChars(m);
+	return Math.max(0, Math.ceil((before - after) / 4));
 }
 
 /**
@@ -223,16 +234,16 @@ export function compressionPlaceholderToolResult(
 	topic: string,
 ): number {
 	if (isAlreadyPlaceholder(m)) return 0;
-	const before = toolResultTokens(m);
+	const before = toolResultChars(m);
 	m.content = [
 		{
 			type: "text",
-			text: `${COMPRESSION_PLACEHOLDER_PREFIX} #${compressionId}: ${topic}] (see /dcp decompress ${compressionId} to restore)`,
+			text: `${COMPRESSION_PLACEHOLDER_PREFIX} #${compressionId}: ${topic}] (see /dcp decompress ${compressionId} to restore) (recall toolCallId=${m.toolCallId} restores the original)`,
 		},
 	];
 	m.details = undefined;
-	const after = toolResultTokens(m);
-	return Math.max(0, before - after);
+	const after = toolResultChars(m);
+	return Math.max(0, Math.ceil((before - after) / 4));
 }
 
 export const PURGE_ARGS_MARKER = "[args purged by pi-dcp]";
@@ -247,12 +258,18 @@ export const PURGE_ARGS_MARKER = "[args purged by pi-dcp]";
  * protected window. While the counter is <= `turns`, collect tool-call IDs
  * from every assistant tool call and every tool result we see.
  *
- * `turns <= 0` returns an empty set (protection disabled).
+ * `turns <= 0` returns an empty set (protection disabled). `maxSteps` caps how
+ * many assistant steps back the window extends: once that many assistant
+ * messages have been counted, nothing older is added even inside the turn
+ * window (a single long agentic turn would otherwise protect everything).
+ * `maxSteps <= 0` or non-finite means no cap.
  */
-export function protectedByRecency(messages: AnyMessage[], turns: number): Set<string> {
+export function protectedByRecency(messages: AnyMessage[], turns: number, maxSteps = Infinity): Set<string> {
 	if (!Number.isFinite(turns) || turns <= 0) return new Set();
+	const capped = Number.isFinite(maxSteps) && maxSteps > 0;
 	const out = new Set<string>();
 	let userCount = 0;
+	let steps = 0;
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const m = messages[i];
 		if (isUser(m)) {
@@ -262,11 +279,13 @@ export function protectedByRecency(messages: AnyMessage[], turns: number): Set<s
 			if (userCount >= turns) break;
 			continue;
 		}
+		if (capped && steps >= maxSteps) break;
 		if (isToolResult(m)) {
 			out.add(m.toolCallId);
 			continue;
 		}
 		if (isAssistant(m)) {
+			steps++;
 			for (const c of m.content) {
 				if (isToolCall(c)) out.add(c.id);
 			}

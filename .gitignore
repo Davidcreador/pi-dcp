@@ -1,6 +1,7 @@
 # pi-dcp local artifacts
-node_modules/
+node_modules
 node_modules_link
 *.tsbuildinfo
+.pi-subagents/
 
-# User state lives at ~/.pi-dcp/, not in the repo. Nothing else to ignore.
+# User state lives at ~/.pi-dcp/, not in the repo.

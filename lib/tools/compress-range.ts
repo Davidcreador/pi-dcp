@@ -129,6 +129,7 @@ export function createCompressRangeTool(
 						.filter((e) => e?.type === "message" && e.message)
 						.map((e) => e.message as any),
 					ctx.config.turnProtection.turns,
+					ctx.config.turnProtection.maxSteps,
 				);
 				const overlap = ids.filter((id) => protectedSet.has(id));
 				if (overlap.length > 0) {

@@ -1,10 +1,10 @@
 # Pi-Dynamic-Context-Pruning
 
-Cut LLM token spend in long [Pi](https://github.com/earendil-works/pi/tree/main/packages/coding-agent) sessions, automatically. Dedup redundant tool calls, strip errored payloads, and let the model summarize closed work-streams — all without ever modifying your session history.
+Cut LLM token spend in long [Pi](https://github.com/earendil-works/pi/tree/main/packages/coding-agent) sessions, automatically. Dedup redundant tool calls, strip errored payloads, and let the model summarize closed work-streams — without rewriting original session entries.
 
-A faithful port of [@tarquinen/opencode-dcp](https://github.com/Opencode-DCP/opencode-dynamic-context-pruning) tailored to pi's extension API. Zero npm dependencies at runtime.
+A faithful port of [@tarquinen/opencode-dcp](https://github.com/Opencode-DCP/opencode-dynamic-context-pruning) tailored to pi's extension API.
 
-License: AGPL-3.0-or-later. Tests: 55 passing on Node 22 and 24.
+License: AGPL-3.0-or-later. Run `npm run check` for local validation.
 
 ## Contents
 
@@ -14,6 +14,7 @@ License: AGPL-3.0-or-later. Tests: 55 passing on Node 22 and 24.
 - [Quick start](#quick-start)
 - [Slash commands](#slash-commands)
 - [Configuration reference](#configuration-reference)
+- [Experimental Jev context selection](#experimental-jev-context-selection)
 - [Per-model context limits](#per-model-context-limits)
 - [Recipes](#recipes)
 - [Troubleshooting](#troubleshooting)
@@ -30,11 +31,11 @@ A long agentic loop in Pi typically wastes tokens on:
 - Failed payloads — a 4-KB `bash` command that errored, sent back to the model on every subsequent turn
 - Closed work-streams — initial repo scans, abandoned approaches, resolved retry loops whose raw output is no longer useful
 
-pi-dcp prunes all three before the request hits the model. The on-disk session is never touched — pruning is applied to the request payload only, so `/tree`, `/compact`, fork, and resume all keep the originals intact.
+pi-dcp prunes all three before the request hits the model. Pruning changes the request view, not original session entries. Explicit protection/recall controls append metadata or a new reference-data message; native compaction can still remove originals from the active context.
 
 ## How it works
 
-A `context` event fires on every outbound LLM request. pi-dcp hooks that event, rewrites the request payload in-place, and lets it continue to the provider. The on-disk session is never mutated.
+A `context` event fires on every outbound LLM request. pi-dcp clones messages it changes and returns a transformed request view. The original entries are not rewritten.
 
 Three independent mechanisms run on the outbound request:
 
@@ -42,7 +43,7 @@ Three independent mechanisms run on the outbound request:
 |---|---|---|
 | Deduplication | Same `toolName + canonical(args)` keeps the newest result and replaces older copies with a `[pruned by pi-dcp: duplicate ... call]` marker. | Every LLM call (auto) |
 | Errored input purge | Failed tool calls have their arguments stripped after N turns. Error message is preserved. | Every LLM call (auto) |
-| `compress` tool | LLM-callable. Replaces a span of tool results with a lossless technical summary. Two modes: `message` (per-id list) or `range` (start and end span). | When the model decides |
+| `compress` tool | LLM-callable. Replaces a span of tool results with a technical summary. Two modes: `message` (per-id list) or `range` (start and end span). | When the model decides |
 
 Plus three nudge surfaces that bias the model toward compressing:
 
@@ -132,14 +133,19 @@ To bias the model toward compressing more aggressively, edit `~/.pi-dcp/config.j
 | `/dcp stats` | Lifetime savings across all pi sessions |
 | `/dcp sweep [n]` | Stage a compression over the last n tool results (default: since last user message). Use to nuke unwanted output. |
 | `/dcp manual on/off/toggle/status` | Runtime manual mode — stops the LLM from auto-compressing. Edit `config.json` to persist. |
-| `/dcp decompress <id>` | Temporarily restore a stored compression's original tool outputs |
-| `/dcp recompress <id>` | Re-apply a previously decompressed entry |
+| `/dcp decompress <id>` | Confirm durable protection and suspend a compression; archived output requires recall |
+| `/dcp recompress <id>` | Release that compression's protection reason; independent owner pins remain |
+| `/dcp jev stats` | Runtime judgments, model, attempts, timing and estimated reduction |
+| `/dcp jev score <task>` | Review and approve one complete task/source payload for TypeSafe |
+| `/dcp jev continue` | Explicitly confirm one agent turn for the scored task |
+| `/dcp jev cancel` | Cancel transient decisions; pins remain |
+| `/dcp jev restore\|release\|recall <result-entry-id>` | Native-confirmed protection or bounded exact-text recall |
 
 Slash commands work in interactive pi mode only — `pi -p` (print mode) does not dispatch them. The compress tool and auto strategies work in both modes.
 
 ## Configuration reference
 
-Defaults are written to `~/.pi-dcp/config.json` on first run. Per-project overrides at `<repo>/.pi/dcp.json` shallow-merge on top. Restart pi after edits.
+Defaults are written to `~/.pi-dcp/config.json` on first run. Per-project overrides at `<repo>/.pi/dcp.json` merge on top, except the owner-global-only `jev` namespace. Restart pi after edits.
 
 The shipped defaults are tuned for real-world long sessions — see `config.example.json` in this repo for the exact reference shape and inline comments.
 
@@ -147,6 +153,7 @@ The shipped defaults are tuned for real-world long sessions — see `config.exam
 {
   "enabled": true,
   "debug": false,
+  "jev": { "enabled": false, "project": "", "files": [], "dropBelow": null, "auto": false, "task": "" },
   "pruneNotification": "minimal",
 
   "experimental": {
@@ -160,7 +167,8 @@ The shipped defaults are tuned for real-world long sessions — see `config.exam
 
   "turnProtection": {
     "enabled": true,
-    "turns": 3
+    "turns": 3,
+    "maxSteps": 30
   },
 
   "compress": {
@@ -186,6 +194,22 @@ The shipped defaults are tuned for real-world long sessions — see `config.exam
       "enabled": true,
       "protectedTools": []
     },
+    "overlapDedup": {
+      "enabled": true,
+      "protectedTools": []
+    },
+    "supersession": {
+      "enabled": true,
+      "protectedTools": []
+    },
+    "sizeAgeDecay": {
+      "enabled": true,
+      "minTokens": 1500,
+      "minAgeSteps": 12,
+      "headLines": 30,
+      "tailLines": 15,
+      "protectedTools": []
+    },
     "purgeErrors": {
       "enabled": true,
       "turns": 2,
@@ -201,6 +225,7 @@ Field notes:
 - `experimental.customPrompts`: when `true`, honors `prompts/overrides/*.md`.
 - `manualMode.automaticStrategies`: when manual mode is on, still run dedup and purge.
 - `turnProtection.turns`: last N user-bounded turns are immune to pruning.
+- `turnProtection.maxSteps`: cap on assistant steps protected within those turns; long agentic turns expose older steps to pruning.
 - `compress.minContextLimit` / `maxContextLimit`: number of tokens or a `"X%"` string of the model's context window.
 - `compress.nudgeEveryTurns`: per-turn soft-nudge throttle.
 - `compress.nudgeFrequency`: per-request soft-nudge throttle (stacks with the per-turn one).
@@ -209,6 +234,108 @@ Field notes:
 - `strategies.purgeErrors.turns`: turns after which errored args are purged.
 
 Always protected (never pruned, regardless of config): `compress`, `write`, `edit`, `todo`, `task`, `skill`.
+
+## Experimental Jev context selection
+
+**Disabled by default. No accuracy, real cost or latency benefit has been established.**
+Jev answers typed relevance questions; local code controls eligibility and omission.
+This is not a new supervisor or a native-compaction replacement.
+
+The `jev` namespace is accepted **only from owner-global `~/.pi-dcp/config.json`**.
+Repository `.pi/dcp.json` cannot enable it, expand source scope or change the cutoff.
+For a separately approved trial, configure an exact canonical project and relative files:
+
+```json
+{
+  "jev": {
+    "enabled": false,
+    "project": "/absolute/canonical/project",
+    "files": ["src/parser.ts"],
+    "dropBelow": null,
+    "auto": false,
+    "task": ""
+  }
+}
+```
+
+Set `enabled` only when ready for a trial, then reload/restart the trial extension.
+`dropBelow: null` is shadow mode. A numeric cutoff is restricted to `[0, 0.1]`;
+**none is calibrated or recommended yet**. Only probabilities strictly below it
+can omit a result. Enabling this conservative mode also keeps stored compressions,
+deduplication and failed-input purge from bypassing unapproved/uncertain results.
+It can therefore send **more** context than ordinary DCP in that project. Other
+canonical project roots keep ordinary DCP behavior plus independent pins; an
+unresolvable configured scope holds pruning closed.
+
+### Eligible data and explicit controls
+
+- Only successful, observed built-in-tagged `read` calls: whole-file text, no offset/limit,
+  no result details/truncation, exact matching persisted/current output and file snapshot.
+  Unobserved historical reads, images, aliases/symlinks and unknown provenance stay visible.
+- Exact source-file allowlist; common hidden, instruction, documentation, test,
+  evidence and credential paths are excluded. These checks **are not secret detection**.
+  Use only a trusted local runtime: registry tags cannot attest arbitrary tool overrides.
+- At least the last three user-bounded turns remain protected, even if legacy turn
+  protection is disabled. Fixed tools, pins and suspended compressions also win.
+- `/dcp jev score <nonsecret task>` requires native TUI confirmation, then an editor
+  showing the **complete actual JSON payload**. Submit unchanged to approve; Esc cancels.
+  It contains the supplied task, opaque IDs and complete eligible text, not transcripts,
+  arbitrary arguments, memory bodies or added path metadata. Inspect it before sending.
+- Bounds: 2,048 task bytes, 512–6,000 bytes/result, four results/batch, 32,768 request
+  bytes, 65,536 response bytes, eight seconds/request, four attempted batches per loaded
+  session. No automatic retry; reload/session start resets transient budgets and observations.
+- Credentials are read only after approval: `TYPESAFE_API_KEY`, then `TYPESAFE_KEY`,
+  otherwise one bounded literal `TYPESAFE_KEY` assignment in `~/.zshrc`. No shell evaluation.
+- Scoring never waits inside the context hook or starts an agent turn. While idle,
+  `/dcp jev continue` explicitly resumes the scored task. Ordinary new input invalidates
+  decisions; so do task changes, relevant writes, compaction and navigation. No consent
+  or score is imported from another session. Resolved-model changes invalidate reuse.
+
+### Protection and recovery
+
+`/dcp jev stats` lists result-entry IDs for judgments. `restore <id>` writes a pin
+and protects a present original pair; `release <id>` removes only its owner reason.
+Pins replay from branch-local Pi metadata, not an expiring DCP sidecar.
+`/dcp recompress` also lists durable compression protection after sidecar loss;
+`/dcp recompress <id>` can release that reason with native confirmation even if
+the summary is missing or cached as already active. It cannot recreate a missing
+summary, and owner/other compression reasons remain protected. Invalid
+metadata or mismatched protected originals retains the incoming view; inspect
+`protectionBlocked` in stats. Disabling scoring does not release pins.
+
+For an archived result on the current ancestry, `recall <id>` requires an idle
+agent, native confirmation, complete text and conservative headroom. It appends a
+new labelled reference-data message immediately to that branch, **without starting
+a model turn**. It never inserts an orphan old tool result, re-executes a tool,
+searches another session or silently truncates. Unknown budget or oversized/missing
+content is refused. Pins cannot stop native compaction later removing active bytes.
+Foreign-session pin references inherited through forks hold pruning closed; automatic
+reference migration and parent-session lookup are not implemented.
+
+### Measurement limits
+
+`/dcp jev stats` separates attempted/completed requests, reported Jev tokens,
+attempt wall time, approval time, and current-view estimated reductions. Failed or
+cancelled requests can still incur unknown provider cost. Cached judgments need not
+remain eligible. These counters are not invoices or proof of task quality.
+
+`test/jev-benchmark.test.ts` compares original, ordinary-DCP and protected-Jev views
+using synthetic data and injected judgments. It includes both reduction and a case
+where conservative retention costs more tokens. Before choosing a cutoff or wider
+rollout, measure critical-information misses, actual provider/cache costs, recovery,
+compaction frequency and end-to-end task latency on explicitly approved data.
+
+### Installed-host verification
+
+Direct `npm run check` uses local dependencies. To verify a different installed
+Pi, run `node test/check-host.mjs /absolute/path/to/pi-coding-agent` inside a
+credential-free, network-isolated environment with disposable `HOME`/`TMPDIR`.
+It loads the extension and every test through that host's real extension loader,
+with a separate home/process per test file. The loaded handlers also exercise
+context, reload with missing/stale sidecars, native refusal, compaction and exact
+recall against a real host in-memory SessionManager and local UI/action adapters.
+No model agent session or authentication is initialized. Core imports follow host
+aliases; non-core dependencies stay local.
 
 ## Per-model context limits
 
@@ -368,7 +495,7 @@ pi-dcp/
       manual.ts
       sweep.ts
       decompress.ts                 decompress + recompress
-  test/                             55 unit tests, zero external deps
+  test/                             unit tests and synthetic fixtures
     pipeline.test.ts                dedup, purge, mutation safety, idempotency
     misc.test.ts                    config percent parsing, nudge throttling, parseStrictId
     features.test.ts                range mode, prompt overrides, manual modes, nudgeFreq

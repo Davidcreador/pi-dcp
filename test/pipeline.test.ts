@@ -53,6 +53,9 @@ function mkToolResult(id: string, name: string, text: string, isError = false): 
 		timestamp: 0,
 	};
 }
+function mkAssistantNote(text: string): AssistantMessage {
+	return { role: "assistant", content: [{ type: "text", text }], timestamp: 0 };
+}
 
 test("canonicalJson sorts nested keys", () => {
 	const a = { x: { b: 2, a: 1 }, y: [1, 2] };
@@ -198,11 +201,14 @@ test("stored compression replaces tool result with placeholder", () => {
 });
 
 // Invariant: per-pass result.tokensSaved must equal the sum of dedup +
-// purgeErrors + compression savings, and state.stats.tokensSaved must equal
-// the running total of those passes. This pins all three sources in one shot.
-test("tokensSaved invariant: result == dedup + purge + compression, state mirrors lifetime", () => {
+// overlapDedup + supersession + sizeAgeDecay + purgeErrors + compression savings, and state.stats.tokensSaved
+// must equal the running total of those passes. This pins all sources in one shot.
+test("tokensSaved invariant: result == dedup + overlap + purge + compression, state mirrors lifetime", () => {
 	const BIG = "x".repeat(40_000);
 	const msgs: AnyMessage[] = [
+		// Pair 0: old large output (size×age decay candidate; 12 assistants follow)
+		mkAssistantWithCall("g1", "bash", { command: "seq 400" }),
+		mkToolResult("g1", "bash", Array.from({ length: 400 }, (_, i) => `const v_${i} = "padding ${i}";`).join("\n")),
 		// Pair 1: errored bash with long args (purge candidate, but needs aging)
 		mkAssistantWithCall("e1", "bash", { cmd: "y".repeat(2000) }),
 		mkToolResult("e1", "bash", "command not found", true),
@@ -211,9 +217,22 @@ test("tokensSaved invariant: result == dedup + purge + compression, state mirror
 		mkToolResult("d1", "read", "a".repeat(800)),
 		mkAssistantWithCall("d2", "read", { path: "a.txt" }),
 		mkToolResult("d2", "read", "a".repeat(800)),
-		// Pair 4: separate read with stored compression
+		// Pair 4 & 5: an older read fully contained in a newer read (overlap candidate)
+		mkAssistantWithCall("o1", "read", { path: "b.txt", offset: 1, limit: 10 }),
+		mkToolResult("o1", "read", "b".repeat(200)),
+		mkAssistantWithCall("o2", "read", { path: "b.txt", offset: 1, limit: 40 }),
+		mkToolResult("o2", "read", "b".repeat(800)),
+		// Pair 6: separate read with stored compression
 		mkAssistantWithCall("c1", "read", { path: "huge.log" }),
 		mkToolResult("c1", "read", BIG),
+		// Pair 7: read made stale by a later successful edit (supersession)
+		mkAssistantWithCall("s1", "read", { path: "/abs/stale.ts" }),
+		mkToolResult("s1", "read", "stale".repeat(100)),
+		mkAssistantWithCall("w1", "edit", { path: "/abs/stale.ts", oldText: "a", newText: "b" }),
+		mkToolResult("w1", "edit", "applied"),
+		// Extra assistant steps push g1 past the sizeAgeDecay age floor.
+		mkAssistantNote("step a"), mkAssistantNote("step b"), mkAssistantNote("step c"),
+		mkAssistantNote("step d"), mkAssistantNote("step e"), mkAssistantNote("step f"),
 	];
 
 	const state = createSessionState();
@@ -233,6 +252,9 @@ test("tokensSaved invariant: result == dedup + purge + compression, state mirror
 	const r = runPipeline(msgs, lenientConfig(), state, silentLogger);
 
 	assert.ok(r.dedupPruned >= 1, "expected dedup to fire");
+	assert.ok(r.overlapPruned >= 1, "expected overlap dedup to fire");
+	assert.ok(r.superseded >= 1, "expected supersession to fire");
+	assert.ok(r.decayed >= 1, "expected size×age decay to fire");
 	assert.ok(r.errorInputsPurged >= 1, "expected purge to fire");
 	assert.ok(r.compressionsApplied >= 1, "expected compression to fire");
 	assert.ok(r.tokensSaved > 0, "expected non-zero savings");
@@ -241,9 +263,12 @@ test("tokensSaved invariant: result == dedup + purge + compression, state mirror
 	assert.equal(
 		state.stats.tokensSaved,
 		r.tokensSaved,
-		"state.stats.tokensSaved must mirror result.tokensSaved across ALL three sources",
+		"state.stats.tokensSaved must mirror result.tokensSaved across ALL six sources",
 	);
 	assert.equal(state.stats.dedupPruned, r.dedupPruned);
+	assert.equal(state.stats.overlapPruned, r.overlapPruned);
+	assert.equal(state.stats.superseded, r.superseded);
+	assert.equal(state.stats.decayed, r.decayed);
 	assert.equal(state.stats.errorInputsPurged, r.errorInputsPurged);
 	assert.equal(state.stats.compressionsApplied, r.compressionsApplied);
 });

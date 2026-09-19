@@ -14,7 +14,19 @@ import * as path from "node:path";
 
 export type Permission = "allow" | "ask" | "deny";
 
+export interface JevConfig {
+	enabled: boolean;
+	project: string;
+	files: string[];
+	/** null is shadow mode; a non-null cutoff requires owner evaluation. */
+	dropBelow: number | null;
+	/** Score observed candidates without per-batch review; requires a non-empty task. */
+	auto: boolean;
+	task: string;
+}
+
 export interface DcpConfig {
+	jev: JevConfig;
 	enabled: boolean;
 	debug: boolean;
 	/** "off" | "minimal" | "detailed" — controls /dcp context-style notifications. */
@@ -27,6 +39,8 @@ export interface DcpConfig {
 	turnProtection: {
 		enabled: boolean;
 		turns: number;
+		/** Cap on assistant steps protected within the recent turns; long agentic turns expose older steps to pruning. */
+		maxSteps: number;
 	};
 	experimental: {
 		/**
@@ -100,6 +114,26 @@ export interface DcpConfig {
 			/** Tools that must never be deduplicated (e.g. write, edit). */
 			protectedTools: string[];
 		};
+		overlapDedup: {
+			enabled: boolean;
+			/** Tools that must never be treated as reads (never placeholdered by range containment). */
+			protectedTools: string[];
+		};
+		supersession: {
+			enabled: boolean;
+			/** Tools whose reads must never be placeholdered as stale. */
+			protectedTools: string[];
+		};
+		sizeAgeDecay: {
+			enabled: boolean;
+			/** Results smaller than this many tokens are never excerpted. */
+			minTokens: number;
+			/** Assistant messages that must follow a result before it is old enough to excerpt. */
+			minAgeSteps: number;
+			headLines: number;
+			tailLines: number;
+			protectedTools: string[];
+		};
 		purgeErrors: {
 			enabled: boolean;
 			/** Number of turns before errored tool call inputs are pruned. */
@@ -131,6 +165,7 @@ export const ALWAYS_PROTECTED_TOOLS = new Set([
 export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	enabled: true,
 	debug: false,
+	jev: { enabled: false, project: "", files: [], dropBelow: null, auto: false, task: "" },
 	pruneNotification: "minimal",
 	experimental: {
 		customPrompts: false,
@@ -138,6 +173,7 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	turnProtection: {
 		enabled: true,
 		turns: 3,
+		maxSteps: 30,
 	},
 	manualMode: {
 		enabled: false,
@@ -183,6 +219,22 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 	strategies: {
 		deduplication: {
 			enabled: true,
+			protectedTools: [],
+		},
+		overlapDedup: {
+			enabled: true,
+			protectedTools: [],
+		},
+		supersession: {
+			enabled: true,
+			protectedTools: [],
+		},
+		sizeAgeDecay: {
+			enabled: true,
+			minTokens: 1500,
+			minAgeSteps: 12,
+			headLines: 30,
+			tailLines: 15,
 			protectedTools: [],
 		},
 		purgeErrors: {
@@ -276,7 +328,9 @@ export function loadConfig(
 	const globalOverride = safeReadJson(GLOBAL_CONFIG_PATH, onError);
 	const projectPath = path.join(cwd, ".pi", "dcp.json");
 	const projectOverride = safeReadJson(projectPath, onError);
-	return deepMerge(deepMerge(DEFAULT_CONFIG, globalOverride), projectOverride);
+	const ownerConfig = deepMerge(DEFAULT_CONFIG, globalOverride);
+	// A repository cannot enable disclosure, expand the owner's allowlist, or change its cutoff.
+	return { ...deepMerge(ownerConfig, projectOverride), jev: ownerConfig.jev };
 }
 
 /**

@@ -21,6 +21,9 @@ export interface CompressionRecord {
 
 export interface SessionStats {
 	dedupPruned: number;
+	overlapPruned: number;
+	superseded: number;
+	decayed: number;
 	errorInputsPurged: number;
 	compressionsApplied: number;
 	tokensSaved: number;
@@ -44,6 +47,14 @@ export interface SessionState {
 	erroredAt: Map<string, number>;
 	/** Tool-call IDs we have already deduplicated this session (idempotency). */
 	dedupedCallIds: Set<string>;
+	/** Tool-call IDs already superseded by a newer covering read (idempotency). */
+	overlapPrunedCallIds: Set<string>;
+	/** Tool-call IDs already superseded by a later edit/write (idempotency). */
+	supersededCallIds: Set<string>;
+	/** Tool-call IDs already excerpted by size×age decay (idempotency for stats). */
+	decayedCallIds: Set<string>;
+	/** Real per-call token totals measured on the outgoing message list. */
+	callTelemetry: { calls: number; tokensBefore: number; tokensAfter: number };
 	/** Tool-call IDs whose error inputs have been purged (idempotency). */
 	purgedErrorCallIds: Set<string>;
 	/** Tool-call IDs that have already had a compression applied (idempotency for stats). */
@@ -60,6 +71,15 @@ export interface SessionState {
 	lastIterationNudgeAt: number;
 }
 
+/** Legacy suspension remains a protection reason even before durable pin metadata exists. */
+export function suspendedTargets(state: SessionState): Set<string> {
+	const ids = new Set<string>();
+	for (const compression of state.compressions.values()) {
+		if (compression.suspended) for (const id of compression.toolCallIds) ids.add(id);
+	}
+	return ids;
+}
+
 export function createSessionState(): SessionState {
 	return {
 		sessionId: "",
@@ -68,6 +88,9 @@ export function createSessionState(): SessionState {
 		nextCompressionId: 1,
 		stats: {
 			dedupPruned: 0,
+			overlapPruned: 0,
+			superseded: 0,
+			decayed: 0,
 			errorInputsPurged: 0,
 			compressionsApplied: 0,
 			tokensSaved: 0,
@@ -76,6 +99,10 @@ export function createSessionState(): SessionState {
 		turnIndex: 0,
 		erroredAt: new Map(),
 		dedupedCallIds: new Set(),
+		overlapPrunedCallIds: new Set(),
+		supersededCallIds: new Set(),
+		decayedCallIds: new Set(),
+		callTelemetry: { calls: 0, tokensBefore: 0, tokensAfter: 0 },
 		purgedErrorCallIds: new Set(),
 		appliedCompressionTargets: new Set(),
 		lastSoftNudgeTurn: -Infinity,

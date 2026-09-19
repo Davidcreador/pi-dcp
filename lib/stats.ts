@@ -14,6 +14,9 @@ const STATS_FILE = path.join(STATS_DIR, "stats.json");
 export interface LifetimeStats {
 	sessionsTouched: number;
 	dedupPruned: number;
+	overlapPruned: number;
+	superseded: number;
+	decayed: number;
 	errorInputsPurged: number;
 	compressionsApplied: number;
 	tokensSaved: number;
@@ -24,6 +27,9 @@ export interface LifetimeStats {
 const EMPTY: LifetimeStats = {
 	sessionsTouched: 0,
 	dedupPruned: 0,
+	overlapPruned: 0,
+	superseded: 0,
+	decayed: 0,
 	errorInputsPurged: 0,
 	compressionsApplied: 0,
 	tokensSaved: 0,
@@ -55,6 +61,9 @@ export function bumpLifetime(delta: Partial<LifetimeStats>): void {
 		const next: LifetimeStats = {
 			sessionsTouched: cur.sessionsTouched + (delta.sessionsTouched ?? 0),
 			dedupPruned: cur.dedupPruned + (delta.dedupPruned ?? 0),
+			overlapPruned: cur.overlapPruned + (delta.overlapPruned ?? 0),
+			superseded: cur.superseded + (delta.superseded ?? 0),
+			decayed: cur.decayed + (delta.decayed ?? 0),
 			errorInputsPurged: cur.errorInputsPurged + (delta.errorInputsPurged ?? 0),
 			compressionsApplied: cur.compressionsApplied + (delta.compressionsApplied ?? 0),
 			tokensSaved: cur.tokensSaved + (delta.tokensSaved ?? 0),

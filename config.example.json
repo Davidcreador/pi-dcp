@@ -1,6 +1,14 @@
 {
   "enabled": true,
   "debug": false,
+  "jev": {
+    "enabled": false,
+    "project": "",
+    "files": [],
+    "dropBelow": null,
+    "auto": false,
+    "task": ""
+  },
   "pruneNotification": "minimal",
   "experimental": {
     "customPrompts": false
@@ -11,7 +19,8 @@
   },
   "turnProtection": {
     "enabled": true,
-    "turns": 3
+    "turns": 3,
+    "maxSteps": 30
   },
   "compress": {
     "mode": "range",
@@ -51,6 +60,22 @@
   "strategies": {
     "deduplication": {
       "enabled": true,
+      "protectedTools": []
+    },
+    "overlapDedup": {
+      "enabled": true,
+      "protectedTools": []
+    },
+    "supersession": {
+      "enabled": true,
+      "protectedTools": []
+    },
+    "sizeAgeDecay": {
+      "enabled": true,
+      "minTokens": 1500,
+      "minAgeSteps": 12,
+      "headLines": 30,
+      "tailLines": 15,
       "protectedTools": []
     },
     "purgeErrors": {

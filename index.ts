@@ -34,8 +34,10 @@ import type {
 	AgentEndEvent,
 } from "@earendil-works/pi-coding-agent";
 import { loadConfig } from "./lib/config.ts";
+import { createJevController } from "./lib/jev.ts";
 import { Logger } from "./lib/logger.ts";
 import { runPipeline } from "./lib/pipeline.ts";
+import { countMessagesTokens, recordCall } from "./lib/telemetry.ts";
 import { createSessionState } from "./lib/state.ts";
 import { bumpLifetime } from "./lib/stats.ts";
 import { makeNudgeHandler } from "./lib/nudges.ts";
@@ -43,6 +45,7 @@ import { notifyPipelineResult, refreshFooterStatus } from "./lib/notifications.t
 import { PromptStore } from "./lib/prompts/index.ts";
 import { createCompressMessageTool } from "./lib/tools/compress-message.ts";
 import { createCompressRangeTool } from "./lib/tools/compress-range.ts";
+import { createRecallTool } from "./lib/tools/recall.ts";
 import { handleHelp } from "./lib/commands/help.ts";
 import { handleStats } from "./lib/commands/stats.ts";
 import { makeContextCommand } from "./lib/commands/context.ts";
@@ -75,6 +78,7 @@ export default function piDcp(pi: ExtensionAPI): void {
 		customPromptsEnabled: config.experimental.customPrompts,
 	});
 	const state = createSessionState();
+	const jev = createJevController(pi, config, state);
 	// Seed runtime manualMode from config so the user can opt in declaratively.
 	state.manualMode = config.manualMode.enabled;
 
@@ -147,9 +151,26 @@ export default function piDcp(pi: ExtensionAPI): void {
 	//    inline toast) gated by config.pruneNotification.
 	pi.on("context", (event: ContextEvent, ctx: ExtensionContext): ContextEventResult | void => {
 		try {
-			const result = runPipeline(event.messages as any, config, state, logger);
+			const policy = jev.selection.policy(jev.view(ctx, event.messages));
+			if (policy.hold) return;
+			// Jev owns its omission markers; older strategies must not replace them with an unrelated summary.
+			const protectedIds = new Set([...policy.keep, ...policy.omit.keys()]);
+			const result = runPipeline(event.messages, config, state, logger, protectedIds);
 			notifyPipelineResult(ctx, config, state, result, logger);
-			return { messages: result.messages as ContextEvent["messages"] };
+			const messages = jev.selection.apply(result.messages, policy, event.messages);
+			const before = countMessagesTokens(event.messages);
+			const after = countMessagesTokens(messages);
+			recordCall(state, before, after);
+			logger.info("context call", {
+				before, after, removed: before - after,
+				dedupPruned: result.dedupPruned,
+				errorInputsPurged: result.errorInputsPurged,
+				compressionsApplied: result.compressionsApplied,
+				overlapPruned: result.overlapPruned,
+				superseded: result.superseded,
+				decayed: result.decayed,
+			});
+			return { messages };
 		} catch (err) {
 			logger.error("pipeline crashed — passing messages through unchanged", {
 				error: err instanceof Error ? err.message : String(err),
@@ -186,15 +207,17 @@ export default function piDcp(pi: ExtensionAPI): void {
 		}
 	});
 
-	// 4. Compress tool: one variant based on configured mode.
+	// 4. Compress tool: one variant based on configured mode. The read-only
+	//    recall tool is always available — it restores, never prunes.
+	const toolCtx = { state, logger, config };
 	if (config.compress.permission !== "deny") {
-		const toolCtx = { state, logger, config };
 		if (config.compress.mode === "range") {
 			pi.registerTool(createCompressRangeTool(toolCtx, prompts));
 		} else {
 			pi.registerTool(createCompressMessageTool(toolCtx, prompts));
 		}
 	}
+	pi.registerTool(createRecallTool(toolCtx));
 
 	// 5. Throttled system-prompt nudges.
 	pi.on("before_agent_start", makeNudgeHandler(config, state, prompts));
@@ -203,7 +226,7 @@ export default function piDcp(pi: ExtensionAPI): void {
 	pi.registerCommand("dcp", {
 		description: "Dynamic context pruning — see /dcp for subcommands",
 		getArgumentCompletions(prefix) {
-			const subs = ["context", "stats", "sweep", "manual", "decompress", "recompress"];
+			const subs = ["context", "stats", "sweep", "manual", "decompress", "recompress", "jev"];
 			return subs
 				.filter((s) => s.startsWith(prefix.trim()))
 				.map((s) => ({ value: s, label: s }));
@@ -219,15 +242,20 @@ export default function piDcp(pi: ExtensionAPI): void {
 					case "context":
 						return makeContextCommand(state)(subArgs, ctx);
 					case "stats":
-						return handleStats(subArgs, ctx);
+						return handleStats(subArgs, ctx, state);
 					case "manual":
 						return makeManualCommand(state)(subArgs, ctx);
 					case "sweep":
 						return makeSweepCommand(state, config, logger)(subArgs, ctx);
 					case "decompress":
-						return makeDecompressCommand(state)(subArgs, ctx);
+						return makeDecompressCommand(state, (record) => jev.recordPins(ctx, record.toolCallIds, "pin", `compression:${record.id}`))(subArgs, ctx);
 					case "recompress":
-						return makeRecompressCommand(state)(subArgs, ctx);
+						return makeRecompressCommand(state, {
+							compressionIds: () => jev.compressionIds(ctx),
+							release: id => jev.releaseCompression(ctx, id),
+						})(subArgs, ctx);
+					case "jev":
+						return jev.command(subArgs, ctx);
 					default:
 						void toast(ctx, `pi-dcp: unknown subcommand "${sub}"`, "warning");
 						return handleHelp("", ctx);

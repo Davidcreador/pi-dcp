@@ -1,6 +1,6 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { toast } from "../ui/toast.ts";
-import type { SessionState } from "../state.ts";
+import type { CompressionRecord, SessionState } from "../state.ts";
 
 /** Strict positive-integer parse — rejects "5abc", negatives, NaN. */
 function parseStrictId(arg: string): number | undefined {
@@ -9,7 +9,7 @@ function parseStrictId(arg: string): number | undefined {
 	return Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
-export function makeDecompressCommand(state: SessionState) {
+export function makeDecompressCommand(state: SessionState, protect?: (record: CompressionRecord) => Promise<void>) {
 	return async function handleDecompress(args: string, ctx: ExtensionCommandContext): Promise<void> {
 		const arg = args.trim();
 		if (!arg) {
@@ -37,22 +37,30 @@ export function makeDecompressCommand(state: SessionState) {
 			void toast(ctx, `pi-dcp: compression #${id} is already decompressed`, "info");
 			return;
 		}
+		await protect?.(rec);
 		rec.suspended = true;
-		void toast(ctx, `pi-dcp: compression #${id} decompressed (originals restored)`, "info");
+		void toast(ctx, `pi-dcp: compression #${id} suspended; present originals protected, archived results require recall`, "info");
 	};
 }
 
-export function makeRecompressCommand(state: SessionState) {
+/** Durable compression reasons remain discoverable/releasable without the expiring summary sidecar. */
+export interface CompressionRelease {
+	compressionIds(): number[];
+	release(id: number): Promise<boolean>;
+}
+
+export function makeRecompressCommand(state: SessionState, protection?: CompressionRelease) {
 	return async function handleRecompress(args: string, ctx: ExtensionCommandContext): Promise<void> {
 		const arg = args.trim();
 		if (!arg) {
-			const suspended = [...state.compressions.values()].filter((r) => r.suspended);
-			if (suspended.length === 0) {
+			const suspended = new Set([...state.compressions.values()].filter(r => r.suspended).map(r => r.id));
+			for (const id of protection?.compressionIds() ?? []) suspended.add(id);
+			if (suspended.size === 0) {
 				void toast(ctx, "pi-dcp: no decompressed entries to recompress", "info");
 				return;
 			}
 			const lines = ["pi-dcp / suspended compressions (run /dcp recompress <id>):"];
-			for (const r of suspended) lines.push(`  #${r.id} — ${r.topic}`);
+			for (const id of suspended) lines.push(`  #${id} — ${state.compressions.get(id)?.topic ?? "durable protection; summary unavailable"}`);
 			void toast(ctx, lines.join("\n"), "info");
 			return;
 		}
@@ -62,12 +70,15 @@ export function makeRecompressCommand(state: SessionState) {
 			return;
 		}
 		const rec = state.compressions.get(id);
+		const released = await protection?.release(id);
 		if (!rec) {
-			void toast(ctx, `pi-dcp: no compression with id ${id}`, "warning");
+			void toast(ctx, released ? `pi-dcp: compression #${id} protection released; summary unavailable`
+				: `pi-dcp: no compression with id ${id}`, released ? "info" : "warning");
 			return;
 		}
 		if (!rec.suspended) {
-			void toast(ctx, `pi-dcp: compression #${id} is already active`, "info");
+			void toast(ctx, released ? `pi-dcp: compression #${id} protection released; stored summary active`
+				: `pi-dcp: compression #${id} is already active`, "info");
 			return;
 		}
 		rec.suspended = false;

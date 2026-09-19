@@ -48,7 +48,7 @@ function formatTokens(n: number): string {
 function buildFooterText(state: SessionState): string {
 	const s = state.stats;
 	const total =
-		s.dedupPruned + s.errorInputsPurged + s.compressionsApplied;
+		s.dedupPruned + s.overlapPruned + s.superseded + s.decayed + s.errorInputsPurged + s.compressionsApplied;
 	if (total === 0) return "DCP: idle";
 	return `DCP: ~${formatTokens(s.tokensSaved)} saved`;
 }
@@ -57,6 +57,15 @@ function buildToastText(result: PipelineResult): string {
 	const parts: string[] = [];
 	if (result.dedupPruned > 0) {
 		parts.push(`${result.dedupPruned} duplicate${result.dedupPruned > 1 ? "s" : ""}`);
+	}
+	if (result.overlapPruned > 0) {
+		parts.push(`${result.overlapPruned} superseded read${result.overlapPruned > 1 ? "s" : ""}`);
+	}
+	if (result.superseded > 0) {
+		parts.push(`${result.superseded} stale read${result.superseded > 1 ? "s" : ""}`);
+	}
+	if (result.decayed > 0) {
+		parts.push(`${result.decayed} excerpt${result.decayed > 1 ? "s" : ""}`);
 	}
 	if (result.errorInputsPurged > 0) {
 		parts.push(
@@ -96,6 +105,9 @@ export function notifyPipelineResult(
 
 	const didWork =
 		result.dedupPruned > 0 ||
+		result.overlapPruned > 0 ||
+		result.superseded > 0 ||
+		result.decayed > 0 ||
 		result.errorInputsPurged > 0 ||
 		result.compressionsApplied > 0;
 
@@ -138,6 +150,9 @@ export function notifyPipelineResult(
 		toastFired,
 		result: {
 			dedupPruned: result.dedupPruned,
+			overlapPruned: result.overlapPruned,
+			superseded: result.superseded,
+			decayed: result.decayed,
 			errorInputsPurged: result.errorInputsPurged,
 			compressionsApplied: result.compressionsApplied,
 		},

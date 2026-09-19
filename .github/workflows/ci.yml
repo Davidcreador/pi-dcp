@@ -20,13 +20,14 @@ jobs:
           node-version: ${{ matrix.node }}
 
       # pi-dcp declares @earendil-works/pi-coding-agent as a peer dependency.
-      # npm install resolves dev/peer deps for type-checking only; nothing
-      # actually runs against pi in CI — we only verify tsc and unit tests.
-      - name: Install dev dependencies
+      # package-lock.json pins the peer tree (pi-agent-core, pi-ai, pi-tui,
+      # @types/node) hoisted at top level; installing @latest instead leaves
+      # them nested where tsc and node cannot resolve them. Nothing actually
+      # runs against pi in CI — we only verify tsc and unit tests.
+      - name: Install dependencies
         run: |
-          npm install --no-save --silent \
-            typescript@latest \
-            @earendil-works/pi-coding-agent@latest
+          npm ci --silent
+          npm install --no-save --silent typescript@latest
 
       - name: Typecheck
         run: npx tsc --noEmit -p .
