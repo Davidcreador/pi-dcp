@@ -148,7 +148,7 @@ export function toolResultChars(m: ToolResultMessage): number {
 	return n;
 }
 
-/** Approximate token count for a ToolResultMessage's content payload. */
+/** Precise token count for a ToolResultMessage's payload. Only for one-shot tool surfaces (recall details); the pipeline uses toolResultChars estimates. */
 export function toolResultTokens(m: ToolResultMessage): number {
 	let n = 0;
 	for (const c of m.content) {
@@ -210,7 +210,7 @@ export function isExcerpt(m: ToolResultMessage): boolean {
  */
 export function placeholderToolResult(m: ToolResultMessage, reason: string): number {
 	if (isAlreadyPlaceholder(m)) return 0;
-	const before = toolResultTokens(m);
+	const before = toolResultChars(m);
 	m.content = [
 		{
 			type: "text",
@@ -218,8 +218,8 @@ export function placeholderToolResult(m: ToolResultMessage, reason: string): num
 		},
 	];
 	m.details = undefined;
-	const after = toolResultTokens(m);
-	return Math.max(0, before - after);
+	const after = toolResultChars(m);
+	return Math.max(0, Math.ceil((before - after) / 4));
 }
 
 /**
@@ -234,7 +234,7 @@ export function compressionPlaceholderToolResult(
 	topic: string,
 ): number {
 	if (isAlreadyPlaceholder(m)) return 0;
-	const before = toolResultTokens(m);
+	const before = toolResultChars(m);
 	m.content = [
 		{
 			type: "text",
@@ -242,8 +242,8 @@ export function compressionPlaceholderToolResult(
 		},
 	];
 	m.details = undefined;
-	const after = toolResultTokens(m);
-	return Math.max(0, before - after);
+	const after = toolResultChars(m);
+	return Math.max(0, Math.ceil((before - after) / 4));
 }
 
 export const PURGE_ARGS_MARKER = "[args purged by pi-dcp]";

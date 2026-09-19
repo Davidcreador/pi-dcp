@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { ALWAYS_PROTECTED_TOOLS, type DcpConfig, type JevConfig } from "./config.ts";
-import { approxTokens, canonicalJson, cloneForMutation, isAlreadyPlaceholder, isToolResult, protectedByRecency, type AnyMessage } from "./messages.ts";
+import { canonicalJson, cloneForMutation, isAlreadyPlaceholder, isToolResult, protectedByRecency, type AnyMessage } from "./messages.ts";
 import { exactKeys, findResult, isRecord, prepareRecovery, protectedUnchanged, replayPins, type OriginalResult } from "./protection.ts";
 import { MAX_CANDIDATES, MAX_RESULT_BYTES, makeRequest, readKey, requestJev, type JevRequest, type JevResponse } from "./jev-client.ts";
 
@@ -294,8 +294,8 @@ export class JevSelection {
 			const ref = policy.omit.get(message.toolCallId);
 			if (!ref) return message;
 			const marker = `[pruned by pi-dcp: Jev-selected result ${ref}; /dcp jev restore ${ref}]`;
-			const before = message.content.reduce((sum, block) => sum + (block.type === "text" ? approxTokens(block.text) : 0), 0);
-			const removed = before - approxTokens(marker);
+			const before = message.content.reduce((sum, block) => sum + (block.type === "text" ? block.text.length : 0), 0);
+			const removed = Math.ceil((before - marker.length) / 4);
 			if (removed <= 0) return message;
 			const copy = cloneForMutation(message);
 			copy.content = [{ type: "text", text: marker }];

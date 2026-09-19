@@ -21,7 +21,6 @@ import { ALWAYS_PROTECTED_TOOLS, type DcpConfig } from "../config.ts";
 import {
 	type AnyMessage,
 	PURGE_ARGS_MARKER,
-	approxTokens,
 	canonicalJson,
 	isAssistant,
 	isToolCall,
@@ -82,17 +81,17 @@ export function applyPurgeErrors(
 			if (seenAt === undefined) continue;
 			if (state.turnIndex - seenAt < cfg.turns) continue;
 
-			let beforeTokens = 0;
+			let beforeChars = 0;
 			try {
-				beforeTokens = approxTokens(canonicalJson(c.arguments));
+				beforeChars = canonicalJson(c.arguments).length;
 			} catch {
-				beforeTokens = 0;
+				beforeChars = 0;
 			}
 			c.arguments = { __purged: PURGE_ARGS_MARKER };
-			const afterTokens = approxTokens(canonicalJson(c.arguments));
+			const afterChars = canonicalJson(c.arguments).length;
 			state.purgedErrorCallIds.add(c.id);
 			purgedCount++;
-			tokensSaved += Math.max(0, beforeTokens - afterTokens);
+			tokensSaved += Math.max(0, Math.ceil((beforeChars - afterChars) / 4));
 		}
 	}
 
