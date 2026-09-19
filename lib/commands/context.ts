@@ -71,6 +71,11 @@ export function makeContextCommand(state: SessionState) {
 					},
 					{
 						kind: "kv",
+						label: "stale reads superseded",
+						value: state.stats.superseded.toLocaleString(),
+					},
+					{
+						kind: "kv",
 						label: "errored tool inputs purged",
 						value: state.stats.errorInputsPurged.toLocaleString(),
 					},

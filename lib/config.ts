@@ -114,6 +114,11 @@ export interface DcpConfig {
 			/** Tools that must never be treated as reads (never placeholdered by range containment). */
 			protectedTools: string[];
 		};
+		supersession: {
+			enabled: boolean;
+			/** Tools whose reads must never be placeholdered as stale. */
+			protectedTools: string[];
+		};
 		purgeErrors: {
 			enabled: boolean;
 			/** Number of turns before errored tool call inputs are pruned. */
@@ -201,6 +206,10 @@ export const DEFAULT_CONFIG: DcpConfig = Object.freeze({
 			protectedTools: [],
 		},
 		overlapDedup: {
+			enabled: true,
+			protectedTools: [],
+		},
+		supersession: {
 			enabled: true,
 			protectedTools: [],
 		},

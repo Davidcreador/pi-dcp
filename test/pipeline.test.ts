@@ -219,6 +219,11 @@ test("tokensSaved invariant: result == dedup + overlap + purge + compression, st
 		// Pair 6: separate read with stored compression
 		mkAssistantWithCall("c1", "read", { path: "huge.log" }),
 		mkToolResult("c1", "read", BIG),
+		// Pair 7: read made stale by a later successful edit (supersession)
+		mkAssistantWithCall("s1", "read", { path: "/abs/stale.ts" }),
+		mkToolResult("s1", "read", "stale".repeat(100)),
+		mkAssistantWithCall("w1", "edit", { path: "/abs/stale.ts", oldText: "a", newText: "b" }),
+		mkToolResult("w1", "edit", "applied"),
 	];
 
 	const state = createSessionState();
@@ -239,6 +244,7 @@ test("tokensSaved invariant: result == dedup + overlap + purge + compression, st
 
 	assert.ok(r.dedupPruned >= 1, "expected dedup to fire");
 	assert.ok(r.overlapPruned >= 1, "expected overlap dedup to fire");
+	assert.ok(r.superseded >= 1, "expected supersession to fire");
 	assert.ok(r.errorInputsPurged >= 1, "expected purge to fire");
 	assert.ok(r.compressionsApplied >= 1, "expected compression to fire");
 	assert.ok(r.tokensSaved > 0, "expected non-zero savings");
@@ -247,10 +253,11 @@ test("tokensSaved invariant: result == dedup + overlap + purge + compression, st
 	assert.equal(
 		state.stats.tokensSaved,
 		r.tokensSaved,
-		"state.stats.tokensSaved must mirror result.tokensSaved across ALL four sources",
+		"state.stats.tokensSaved must mirror result.tokensSaved across ALL five sources",
 	);
 	assert.equal(state.stats.dedupPruned, r.dedupPruned);
 	assert.equal(state.stats.overlapPruned, r.overlapPruned);
+	assert.equal(state.stats.superseded, r.superseded);
 	assert.equal(state.stats.errorInputsPurged, r.errorInputsPurged);
 	assert.equal(state.stats.compressionsApplied, r.compressionsApplied);
 });

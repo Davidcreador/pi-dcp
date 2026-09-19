@@ -61,6 +61,11 @@ export async function handleStats(
 					},
 					{
 						kind: "kv",
+						label: "stale reads superseded",
+						value: s.superseded.toLocaleString(),
+					},
+					{
+						kind: "kv",
 						label: "errored tool inputs purged",
 						value: s.errorInputsPurged.toLocaleString(),
 					},

@@ -175,6 +175,8 @@ export function cloneForMutation<T extends AnyMessage>(m: T): T {
 
 const PRUNED_PLACEHOLDER_PREFIX = "[pruned by pi-dcp:";
 const COMPRESSION_PLACEHOLDER_PREFIX = "[pi-dcp compression";
+/** Marks a size×age excerpt. NOT a placeholder — excerpts carry real content and must stay visible to pruning checks. */
+export const EXCERPT_MARKER_PREFIX = "[pi-dcp excerpt:";
 
 /** True if this tool result's content is already a pi-dcp placeholder. Used to keep the pipeline idempotent. */
 export function isAlreadyPlaceholder(m: ToolResultMessage): boolean {
@@ -184,6 +186,11 @@ export function isAlreadyPlaceholder(m: ToolResultMessage): boolean {
 		first.text.startsWith(PRUNED_PLACEHOLDER_PREFIX) ||
 		first.text.startsWith(COMPRESSION_PLACEHOLDER_PREFIX)
 	);
+}
+
+/** True if this tool result already carries a size×age excerpt (marker lives inside the text block). */
+export function isExcerpt(m: ToolResultMessage): boolean {
+	return m.content.some(c => (c as TextContent).type === "text" && (c as TextContent).text.includes(EXCERPT_MARKER_PREFIX));
 }
 
 /**

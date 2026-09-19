@@ -32,6 +32,7 @@ import {
 } from "./messages.ts";
 import { applyDeduplication } from "./strategies/deduplication.ts";
 import { applyOverlapDedup } from "./strategies/overlap-dedup.ts";
+import { applySupersession } from "./strategies/supersession.ts";
 import { applyPurgeErrors } from "./strategies/purge-errors.ts";
 import { suspendedTargets, type CompressionRecord, type SessionState } from "./state.ts";
 import { bumpLifetime } from "./stats.ts";
@@ -41,6 +42,7 @@ export interface PipelineResult<T extends AnyMessage = AnyMessage> {
 	messages: T[];
 	dedupPruned: number;
 	overlapPruned: number;
+	superseded: number;
 	errorInputsPurged: number;
 	compressionsApplied: number;
 	tokensSaved: number;
@@ -124,6 +126,7 @@ export function runPipeline<T extends AnyMessage>(
 		messages,
 		dedupPruned: 0,
 		overlapPruned: 0,
+		superseded: 0,
 		errorInputsPurged: 0,
 		compressionsApplied: 0,
 		tokensSaved: 0,
@@ -169,17 +172,23 @@ export function runPipeline<T extends AnyMessage>(
 		result.overlapPruned = overlap.prunedCount;
 		result.tokensSaved += overlap.tokensSaved;
 
-		// 4. Purge errored tool inputs.
+		// 4. Supersession (reads made stale by a later edit/write).
+		const superseded = applySupersession(messages, config, state, protectedByTurn);
+		result.superseded = superseded.supersededCount;
+		result.tokensSaved += superseded.tokensSaved;
+
+		// 5. Purge errored tool inputs.
 		const purged = applyPurgeErrors(messages, config, state, protectedByTurn);
 		result.errorInputsPurged = purged.purgedCount;
 		result.tokensSaved += purged.tokensSaved;
 	}
 
-	if (result.dedupPruned || result.overlapPruned || result.errorInputsPurged || result.compressionsApplied) {
+	if (result.dedupPruned || result.overlapPruned || result.superseded || result.errorInputsPurged || result.compressionsApplied) {
 		state.stats.compressionsApplied += result.compressionsApplied;
 		logger.info("pipeline applied", {
 			dedupPruned: result.dedupPruned,
 			overlapPruned: result.overlapPruned,
+			superseded: result.superseded,
 			errorInputsPurged: result.errorInputsPurged,
 			compressionsApplied: result.compressionsApplied,
 			tokensSaved: result.tokensSaved,
@@ -187,6 +196,7 @@ export function runPipeline<T extends AnyMessage>(
 		bumpLifetime({
 			dedupPruned: result.dedupPruned,
 			overlapPruned: result.overlapPruned,
+			superseded: result.superseded,
 			errorInputsPurged: result.errorInputsPurged,
 			compressionsApplied: result.compressionsApplied,
 			tokensSaved: result.tokensSaved,
